@@ -1,0 +1,1277 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import * as React from 'react'
+     4→     4→import { useApp } from '@/lib/store'
+     5→     5→import { apiGet } from '@/lib/api-client'
+     6→     6→import {
+     7→     7→  DEMO_REGIONS,
+     8→     8→  MAP_BOUNDS,
+     9→     9→  HAZARD_META,
+    10→    10→  projectLatLng,
+    11→    11→  formatRelativeTime,
+    12→    12→  distanceKm,
+    13→    13→  type Severity,
+    14→    14→  type HazardType,
+    15→    15→} from '@/lib/constants'
+    16→    16→import { Card, CardContent } from '@/components/ui/card'
+    17→    17→import { Button } from '@/components/ui/button'
+    18→    18→import { Badge } from '@/components/ui/badge'
+    19→    19→import { Switch } from '@/components/ui/switch'
+    20→    20→import { Label } from '@/components/ui/label'
+    21→    21→import {
+    22→    22→  Sheet,
+    23→    23→  SheetContent,
+    24→    24→  SheetHeader,
+    25→    25→  SheetTitle,
+    26→    26→  SheetDescription,
+    27→    27→} from '@/components/ui/sheet'
+    28→    28→import {
+    29→    29→  Tooltip,
+    30→    30→  TooltipContent,
+    31→    31→  TooltipProvider,
+    32→    32→  TooltipTrigger,
+    33→    33→} from '@/components/ui/tooltip'
+    34→    34→import { Separator } from '@/components/ui/separator'
+    35→    35→import { Skeleton } from '@/components/ui/skeleton'
+    36→    36→import { Slider } from '@/components/ui/slider'
+    37→    37→import {
+    38→    38→  Select,
+    39→    39→  SelectContent,
+    40→    40→  SelectItem,
+    41→    41→  SelectTrigger,
+    42→    42→  SelectValue,
+    43→    43→} from '@/components/ui/select'
+    44→    44→import {
+    45→    45→  Collapsible,
+    46→    46→  CollapsibleContent,
+    47→    47→  CollapsibleTrigger,
+    48→    48→} from '@/components/ui/collapsible'
+    49→    49→import {
+    50→    50→  SeverityBadge,
+    51→    51→  VerificationBadge,
+    52→    52→  SimulationBadge,
+    53→    53→  StatusBadge,
+    54→    54→  HazardBadge,
+    55→    55→} from '@/components/shared/badges'
+    56→    56→import { toast } from 'sonner'
+    57→    57→import { cn } from '@/lib/utils'
+    58→    58→import {
+    59→    59→  Map as MapIcon,
+    60→    60→  Plus,
+    61→    61→  Minus,
+    62→    62→  Maximize2,
+    63→    63→  Minimize2,
+    64→    64→  LocateFixed,
+    65→    65→  Layers,
+    66→    66→  ChevronDown,
+    67→    67→  ChevronUp,
+    68→    68→  AlertTriangle,
+    69→    69→  MapPin,
+    70→    70→  Crosshair,
+    71→    71→  Compass,
+    72→    72→  RotateCcw,
+    73→    73→  Activity,
+    74→    74→  Radio,
+    75→    75→  Clock,
+    76→    76→} from 'lucide-react'
+    77→    77→
+    78→    78→// ── Types ───────────────────────────────────────────────────────────
+    79→    79→type LayerKey = 'incidents' | 'alerts' | 'hazardZones' | 'reports' | 'facilities' | 'regions'
+    80→    80→
+    81→    81→interface FacilityItem {
+    82→    82→  id: string
+    83→    83→  name: string
+    84→    84→  facilityType: string
+    85→    85→  lat: number
+    86→    86→  lng: number
+    87→    87→  status: string
+    88→    88→  capacity: number | null
+    89→    89→  availableUnits: number | null
+    90→    90→}
+    91→    91→interface IncidentItem {
+    92→    92→  id: string
+    93→    93→  incidentCode: string
+    94→    94→  incidentType: string
+    95→    95→  priority: string
+    96→    96→  status: string
+    97→    97→  lat: number
+    98→    98→  lng: number
+    99→    99→  description: string
+   100→   100→  createdAt: string
+   101→   101→  verificationStatus: string
+   102→   102→  simulationMode: boolean
+   103→   103→}
+   104→   104→interface AlertItem {
+   105→   105→  id: string
+   106→   106→  title: string
+   107→   107→  alertType: string
+   108→   108→  severity: string
+   109→   109→  verificationStatus: string
+   110→   110→  lat: number
+   111→   111→  lng: number
+   112→   112→  radiusKm: number
+   113→   113→  issuedAt: string
+   114→   114→  expiresAt: string
+   115→   115→  status: string
+   116→   116→  simulationMode: boolean
+   117→   117→  body?: string
+   118→   118→}
+   119→   119→interface HazardZoneItem {
+   120→   120→  id: string
+   121→   121→  name: string
+   122→   122→  hazardType: string
+   123→   123→  lat: number
+   124→   124→  lng: number
+   125→   125→  radiusKm: number
+   126→   126→  baselineLevel: string
+   127→   127→  source: string | null
+   128→   128→}
+   129→   129→interface ReportItem {
+   130→   130→  id: string
+   131→   131→  category: string
+   132→   132→  description: string
+   133→   133→  lat: number
+   134→   134→  lng: number
+   135→   135→  severity: string
+   136→   136→  status: string
+   137→   137→  createdAt: string
+   138→   138→  verificationStatus: string
+   139→   139→}
+   140→   140→interface RegionItem {
+   141→   141→  id: string
+   142→   142→  canonicalName: string
+   143→   143→  localName: string | null
+   144→   144→  regionType: string
+   145→   145→  lat: number
+   146→   146→  lng: number
+   147→   147→  coverageStatus: string
+   148→   148→}
+   149→   149→
+   150→   150→interface MapData {
+   151→   151→  selected: { lat: number; lng: number } | null
+   152→   152→  facilities: FacilityItem[]
+   153→   153→  incidents: IncidentItem[]
+   154→   154→  alerts: AlertItem[]
+   155→   155→  hazardZones: HazardZoneItem[]
+   156→   156→  reports: ReportItem[]
+   157→   157→  regions: RegionItem[]
+   158→   158→}
+   159→   159→
+   160→   160→type SelectedMarker =
+   161→   161→  | { kind: 'incident'; data: IncidentItem }
+   162→   162→  | { kind: 'alert'; data: AlertItem }
+   163→   163→  | { kind: 'hazardZone'; data: HazardZoneItem }
+   164→   164→  | { kind: 'report'; data: ReportItem }
+   165→   165→  | { kind: 'facility'; data: FacilityItem }
+   166→   166→  | { kind: 'region'; data: RegionItem }
+   167→   167→
+   168→   168→// ── Layer meta ──────────────────────────────────────────────────────
+   169→   169→type MarkerShapeKind = 'triangle' | 'hexagon' | 'circle' | 'diamond' | 'square' | 'dot'
+   170→   170→
+   171→   171→interface LayerMeta {
+   172→   172→  label: string
+   173→   173→  color: string
+   174→   174→  ring: string
+   175→   175→  shape: MarkerShapeKind
+   176→   176→  defaultOn: boolean
+   177→   177→}
+   178→   178→
+   179→   179→const LAYER_META: Record<LayerKey, LayerMeta> = {
+   180→   180→  incidents: { label: 'Incidents', color: '#dc2626', ring: 'ring-red-500', shape: 'triangle', defaultOn: true },
+   181→   181→  alerts: { label: 'Alerts', color: '#ea580c', ring: 'ring-orange-500', shape: 'hexagon', defaultOn: true },
+   182→   182→  hazardZones: { label: 'Hazard Zones', color: '#d97706', ring: 'ring-amber-500', shape: 'circle', defaultOn: false },
+   183→   183→  reports: { label: 'Community Reports', color: '#2563eb', ring: 'ring-blue-500', shape: 'diamond', defaultOn: false },
+   184→   184→  facilities: { label: 'Facilities', color: '#059669', ring: 'ring-emerald-500', shape: 'square', defaultOn: true },
+   185→   185→  regions: { label: 'Regions', color: '#475569', ring: 'ring-slate-500', shape: 'dot', defaultOn: false },
+   186→   186→}
+   187→   187→
+   188→   188→// ── Marker shape renderer ───────────────────────────────────────────
+   189→   189→function MarkerShape({
+   190→   190→  shape,
+   191→   191→  color,
+   192→   192→  size,
+   193→   193→}: {
+   194→   194→  shape: MarkerShapeKind
+   195→   195→  color: string
+   196→   196→  size: number
+   197→   197→}) {
+   198→   198→  const s = size
+   199→   199→  switch (shape) {
+   200→   200→    case 'triangle':
+   201→   201→      return (
+   202→   202→        <svg width={s} height={s} viewBox="0 0 16 18" fill="none" aria-hidden>
+   203→   203→          <polygon points="8,0 16,16 0,16" fill={color} stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
+   204→   204→          <text x="8" y="13" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white">!</text>
+   205→   205→        </svg>
+   206→   206→      )
+   207→   207→    case 'hexagon':
+   208→   208→      return (
+   209→   209→        <svg width={s} height={s} viewBox="0 0 16 16" fill="none" aria-hidden>
+   210→   210→          <polygon points="8,0 15,4 15,12 8,16 1,12 1,4" fill={color} stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
+   211→   211→        </svg>
+   212→   212→      )
+   213→   213→    case 'circle':
+   214→   214→      return (
+   215→   215→        <svg width={s} height={s} viewBox="0 0 18 18" fill="none" aria-hidden>
+   216→   216→          <circle cx="9" cy="9" r="8" fill={color} stroke="white" strokeWidth="1.5" />
+   217→   217→          <circle cx="9" cy="9" r="6" fill="none" stroke="white" strokeWidth="1" opacity="0.6" />
+   218→   218→        </svg>
+   219→   219→      )
+   220→   220→    case 'diamond':
+   221→   221→      return (
+   222→   222→        <svg width={s} height={s} viewBox="0 0 16 16" fill="none" aria-hidden>
+   223→   223→          <polygon points="8,0 16,8 8,16 0,8" fill={color} stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
+   224→   224→        </svg>
+   225→   225→      )
+   226→   226→    case 'square':
+   227→   227→      return (
+   228→   228→        <svg width={s} height={s} viewBox="0 0 16 18" fill="none" aria-hidden>
+   229→   229→          <path d="M2 0 L14 0 L14 12 L8 18 L2 12 Z" fill={color} stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
+   230→   230→        </svg>
+   231→   231→      )
+   232→   232→    case 'dot':
+   233→   233→      return (
+   234→   234→        <svg width={s} height={s} viewBox="0 0 12 12" fill="none" aria-hidden>
+   235→   235→          <circle cx="6" cy="6" r="4.5" fill={color} stroke="white" strokeWidth="1.5" />
+   236→   236→        </svg>
+   237→   237→      )
+   238→   238→  }
+   239→   239→}
+   240→   240→
+   241→   241→// ── Marker (single) ─────────────────────────────────────────────────
+   242→   242→function MapMarker({
+   243→   243→  x,
+   244→   244→  y,
+   245→   245→  shape,
+   246→   246→  color,
+   247→   247→  label,
+   248→   248→  showLabel,
+   249→   249→  size,
+   250→   250→  tooltip,
+   251→   251→  onClick,
+   252→   252→}: {
+   253→   253→  x: number
+   254→   254→  y: number
+   255→   255→  shape: MarkerShapeKind
+   256→   256→  color: string
+   257→   257→  label: string
+   258→   258→  showLabel: boolean
+   259→   259→  size: number
+   260→   260→  tooltip: string
+   261→   261→  onClick: () => void
+   262→   262→}) {
+   263→   263→  return (
+   264→   264→    <TooltipProvider delayDuration={120}>
+   265→   265→      <Tooltip>
+   266→   266→        <TooltipTrigger asChild>
+   267→   267→          <button
+   268→   268→            type="button"
+   269→   269→            onClick={onClick}
+   270→   270→            className="absolute z-20 flex flex-col items-center gap-0.5 outline-none focus-visible:z-30 focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+   271→   271→            style={{
+   272→   272→              left: `${x}%`,
+   273→   273→              top: `${y}%`,
+   274→   274→              transform: 'translate(-50%, -50%)',
+   275→   275→            }}
+   276→   276→            aria-label={label}
+   277→   277→          >
+   278→   278→            <MarkerShape shape={shape} color={color} size={size} />
+   279→   279→            {showLabel && (
+   280→   280→              <span
+   281→   281→                className="max-w-[120px] truncate rounded-sm bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border/60 backdrop-blur"
+   282→   282→              >
+   283→   283→                {label}
+   284→   284→              </span>
+   285→   285→            )}
+   286→   286→          </button>
+   287→   287→        </TooltipTrigger>
+   288→   288→        <TooltipContent side="top" className="max-w-[220px]">
+   289→   289→          <span className="block whitespace-normal">{tooltip}</span>
+   290→   290→        </TooltipContent>
+   291→   291→      </Tooltip>
+   292→   292→    </TooltipProvider>
+   293→   293→  )
+   294→   294→}
+   295→   295→
+   296→   296→// ── Selected location marker (pulsing blue) ─────────────────────────
+   297→   297→function SelectedLocationMarker({
+   298→   298→  x,
+   299→   299→  y,
+   300→   300→  label,
+   301→   301→  showLabel,
+   302→   302→}: {
+   303→   303→  x: number
+   304→   304→  y: number
+   305→   305→  label: string
+   306→   306→  showLabel: boolean
+   307→   307→}) {
+   308→   308→  return (
+   309→   309→    <div
+   310→   310→      className="absolute z-30 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+   311→   311→      style={{ left: `${x}%`, top: `${y}%` }}
+   312→   312→    >
+   313→   313→      <div className="relative flex flex-col items-center gap-1">
+   314→   314→        <span className="absolute -top-5 h-10 w-10 -translate-x-1/2 left-1/2 rounded-full bg-cyan-500/20 animate-ping" />
+   315→   315→        <span className="relative flex h-3.5 w-3.5 items-center justify-center">
+   316→   316→          <span className="absolute inline-flex h-full w-full rounded-full bg-cyan-500 opacity-75 animate-ping" />
+   317→   317→          <span className="relative inline-flex h-3 w-3 rounded-full bg-cyan-500 ring-2 ring-white shadow-md" />
+   318→   318→        </span>
+   319→   319→        {showLabel && (
+   320→   320→          <span className="pointer-events-auto whitespace-nowrap rounded-sm bg-cyan-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm ring-1 ring-white/40">
+   321→   321→            <MapPin className="inline h-2.5 w-2.5 mr-0.5" />
+   322→   322→            {label}
+   323→   323→          </span>
+   324→   324→        )}
+   325→   325→      </div>
+   326→   326→    </div>
+   327→   327→  )
+   328→   328→}
+   329→   329→
+   330→   330→// ── Map background grid ─────────────────────────────────────────────
+   331→   331→function MapGrid() {
+   332→   332→  // Faint lat/lng grid: 5 horizontal + 5 vertical lines at 0/25/50/75/100%.
+   333→   333→  const lines = [0, 25, 50, 75, 100]
+   334→   334→  return (
+   335→   335→    <svg
+   336→   336→      className="absolute inset-0 h-full w-full text-foreground/15"
+   337→   337→      aria-hidden
+   338→   338→      preserveAspectRatio="none"
+   339→   339→      viewBox="0 0 100 100"
+   340→   340→    >
+   341→   341→      {lines.map((p) => (
+   342→   342→        <line key={`h-${p}`} x1="0" y1={p} x2="100" y2={p} stroke="currentColor" strokeWidth="0.15" />
+   343→   343→      ))}
+   344→   344→      {lines.map((p) => (
+   345→   345→        <line key={`v-${p}`} x1={p} y1="0" x2={p} y2="100" stroke="currentColor" strokeWidth="0.15" />
+   346→   346→      ))}
+   347→   347→    </svg>
+   348→   348→  )
+   349→   349→}
+   350→   350→
+   351→   351→// ── Legend ──────────────────────────────────────────────────────────
+   352→   352→function Legend({ layers }: { layers: Record<LayerKey, boolean> }) {
+   353→   353→  return (
+   354→   354→    <Card className="absolute bottom-3 right-3 z-20 w-44 p-3 shadow-lg">
+   355→   355→      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+   356→   356→        Legend
+   357→   357→      </div>
+   358→   358→      <ul className="space-y-1.5">
+   359→   359→        {(Object.keys(LAYER_META) as LayerKey[]).map((key) => {
+   360→   360→          const meta = LAYER_META[key]
+   361→   361→          const enabled = layers[key]
+   362→   362→          return (
+   363→   363→            <li key={key} className={cn('flex items-center gap-2', !enabled && 'opacity-40')}>
+   364→   364→              <span className="inline-flex h-4 w-4 items-center justify-center">
+   365→   365→                <MarkerShape shape={meta.shape} color={meta.color} size={14} />
+   366→   366→              </span>
+   367→   367→              <span className="text-[11px] font-medium">{meta.label}</span>
+   368→   368→            </li>
+   369→   369→          )
+   370→   370→        })}
+   371→   371→      </ul>
+   372→   372→      <Separator className="my-2" />
+   373→   373→      <div className="text-[10px] text-muted-foreground leading-snug">
+   374→   374→        Bounds: {MAP_BOUNDS.minLat}–{MAP_BOUNDS.maxLat}°N · {MAP_BOUNDS.minLng}–{MAP_BOUNDS.maxLng}°E
+   375→   375→      </div>
+   376→   376→    </Card>
+   377→   377→  )
+   378→   378→}
+   379→   379→
+   380→   380→// ── Layer panel ─────────────────────────────────────────────────────
+   381→   381→function LayerPanel({
+   382→   382→  layers,
+   383→   383→  setLayers,
+   384→   384→  counts,
+   385→   385→}: {
+   386→   386→  layers: Record<LayerKey, boolean>
+   387→   387→  setLayers: (l: Record<LayerKey, boolean>) => void
+   388→   388→  counts: Record<LayerKey, number>
+   389→   389→}) {
+   390→   390→  const [open, setOpen] = React.useState(true)
+   391→   391→  return (
+   392→   392→    <Card className="absolute top-3 left-3 z-20 w-56 p-0 shadow-lg">
+   393→   393→      <Collapsible open={open} onOpenChange={setOpen}>
+   394→   394→        <CollapsibleTrigger asChild>
+   395→   395→          <button
+   396→   396→            type="button"
+   397→   397→            className="flex w-full items-center justify-between gap-2 rounded-t-xl border-b bg-muted/40 px-3 py-2.5 hover:bg-muted/70"
+   398→   398→          >
+   399→   399→            <span className="flex items-center gap-2 text-sm font-semibold">
+   400→   400→              <Layers className="h-4 w-4 text-muted-foreground" />
+   401→   401→              Layers
+   402→   402→            </span>
+   403→   403→            {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+   404→   404→          </button>
+   405→   405→        </CollapsibleTrigger>
+   406→   406→        <CollapsibleContent>
+   407→   407→          <div className="p-3 pt-2">
+   408→   408→            <ul className="space-y-2">
+   409→   409→              {(Object.keys(LAYER_META) as LayerKey[]).map((key) => {
+   410→   410→                const meta = LAYER_META[key]
+   411→   411→                return (
+   412→   412→                  <li key={key} className="flex items-center justify-between gap-2">
+   413→   413→                    <Label htmlFor={`layer-${key}`} className="flex items-center gap-2 cursor-pointer text-[13px] font-medium">
+   414→   414→                      <span className="inline-flex h-4 w-4 items-center justify-center">
+   415→   415→                        <MarkerShape shape={meta.shape} color={meta.color} size={14} />
+   416→   416→                      </span>
+   417→   417→                      {meta.label}
+   418→   418→                    </Label>
+   419→   419→                    <div className="flex items-center gap-2">
+   420→   420→                      <span className="text-[11px] text-muted-foreground tabular-nums">{counts[key]}</span>
+   421→   421→                      <Switch
+   422→   422→                        id={`layer-${key}`}
+   423→   423→                        checked={layers[key]}
+   424→   424→                        onCheckedChange={(checked) => setLayers({ ...layers, [key]: checked })}
+   425→   425→                        aria-label={`Toggle ${meta.label} layer`}
+   426→   426→                      />
+   427→   427→                    </div>
+   428→   428→                  </li>
+   429→   429→                )
+   430→   430→              })}
+   431→   431→            </ul>
+   432→   432→            <Separator className="my-2.5" />
+   433→   433→            <p className="text-[10px] leading-snug text-muted-foreground">
+   434→   434→              Distinct shapes per layer ensure readability without relying on color alone.
+   435→   435→            </p>
+   436→   436→          </div>
+   437→   437→        </CollapsibleContent>
+   438→   438→      </Collapsible>
+   439→   439→    </Card>
+   440→   440→  )
+   441→   441→}
+   442→   442→
+   443→   443→// ── Map drawer content ──────────────────────────────────────────────
+   444→   444→function MarkerDrawer({
+   445→   445→  selected,
+   446→   446→  onClose,
+   447→   447→  onNavigate,
+   448→   448→}: {
+   449→   449→  selected: SelectedMarker | null
+   450→   450→  onClose: () => void
+   451→   451→  onNavigate: (target: 'alerts' | 'reports' | 'safe-places' | 'risk' | 'operations') => void
+   452→   452→}) {
+   453→   453→  const open = selected !== null
+   454→   454→  return (
+   455→   455→    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+   456→   456→      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto scrollbar-thin">
+   457→   457→        {selected && <DrawerBody selected={selected} onNavigate={onNavigate} />}
+   458→   458→      </SheetContent>
+   459→   459→    </Sheet>
+   460→   460→  )
+   461→   461→}
+   462→   462→
+   463→   463→function DrawerBody({
+   464→   464→  selected,
+   465→   465→  onNavigate,
+   466→   466→}: {
+   467→   467→  selected: SelectedMarker
+   468→   468→  onNavigate: (target: 'alerts' | 'reports' | 'safe-places' | 'risk' | 'operations') => void
+   469→   469→}) {
+   470→   470→  const { kind, data } = selected
+   471→   471→  const meta = LAYER_META[kind]
+   472→   472→  let title = ''
+   473→   473→  let subtitle = ''
+   474→   474→  let coords: { lat: number; lng: number } | null = null
+   475→   475→  let primaryBadge: React.ReactNode = null
+   476→   476→  let secondaryBadges: React.ReactNode[] = []
+   477→   477→  let timeLabel: React.ReactNode = null
+   478→   478→  let description: React.ReactNode = null
+   479→   479→  let details: { label: string; value: React.ReactNode }[] = []
+   480→   480→  let navigateTarget: 'alerts' | 'reports' | 'safe-places' | 'risk' | 'operations' | null = null
+   481→   481→
+   482→   482→  switch (kind) {
+   483→   483→    case 'incident': {
+   484→   484→      const d = data as IncidentItem
+   485→   485→      title = d.incidentCode
+   486→   486→      subtitle = `${d.incidentType.replace(/_/g, ' ')} · ${d.priority} priority`
+   487→   487→      coords = { lat: d.lat, lng: d.lng }
+   488→   488→      primaryBadge = <StatusBadge status={d.status} />
+   489→   489→      secondaryBadges = [
+   490→   490→        <VerificationBadge key="v" status={d.verificationStatus} />,
+   491→   491→        d.simulationMode ? <SimulationBadge key="s" /> : null,
+   492→   492→      ].filter(Boolean)
+   493→   493→      timeLabel = <span>Created {formatRelativeTime(d.createdAt)}</span>
+   494→   494→      description = d.description
+   495→   495→      details = [
+   496→   496→        { label: 'People affected', value: '—' },
+   497→   497→        { label: 'Verification', value: d.verificationStatus.replace(/_/g, ' ') },
+   498→   498→      ]
+   499→   499→      // Incidents: ops role can navigate to operations dashboard.
+   500→   500→      navigateTarget = null
+   501→   501→      break
+   502→   502→    }
+   503→   503→    case 'alert': {
+   504→   504→      const d = data as AlertItem
+   505→   505→      title = d.title
+   506→   506→      subtitle = `${d.alertType.replace(/_/g, ' ')} alert`
+   507→   507→      coords = d.lat != null && d.lng != null ? { lat: d.lat, lng: d.lng } : null
+   508→   508→      primaryBadge = <SeverityBadge severity={(d.severity as Severity) ?? 'INFORMATIONAL'} />
+   509→   509→      secondaryBadges = [
+   510→   510→        <VerificationBadge key="v" status={d.verificationStatus} />,
+   511→   511→        <StatusBadge key="st" status={d.status} />,
+   512→   512→        d.simulationMode ? <SimulationBadge key="s" /> : null,
+   513→   513→      ].filter(Boolean)
+   514→   514→      timeLabel = <span>Issued {formatRelativeTime(d.issuedAt)} · expires {formatRelativeTime(d.expiresAt)}</span>
+   515→   515→      description = d.body ?? 'No additional details.'
+   516→   516→      details = [
+   517→   517→        { label: 'Coverage radius', value: `${d.radiusKm} km` },
+   518→   518→        { label: 'Severity', value: d.severity },
+   519→   519→        { label: 'Verification', value: d.verificationStatus.replace(/_/g, ' ') },
+   520→   520→      ]
+   521→   521→      navigateTarget = 'alerts'
+   522→   522→      break
+   523→   523→    }
+   524→   524→    case 'hazardZone': {
+   525→   525→      const d = data as HazardZoneItem
+   526→   526→      title = d.name
+   527→   527→      subtitle = `${d.hazardType.replace(/_/g, ' ')} susceptibility`
+   528→   528→      coords = { lat: d.lat, lng: d.lng }
+   529→   529→      primaryBadge = <HazardBadge type={d.hazardType} />
+   530→   530→      secondaryBadges = [
+   531→   531→        <Badge key="b" variant="outline" className="font-semibold border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800">
+   532→   532→          Baseline: {d.baselineLevel}
+   533→   533→        </Badge>,
+   534→   534→        d.source ? <Badge key="src" variant="outline" className="text-muted-foreground">{d.source}</Badge> : null,
+   535→   535→      ].filter(Boolean)
+   536→   536→      timeLabel = <span>Radius {d.radiusKm} km</span>
+   537→   537→      description = `Pre-identified ${HAZARD_META[d.hazardType as HazardType]?.label ?? d.hazardType} susceptibility zone with baseline level ${d.baselineLevel}.`
+   538→   538→      details = [
+   539→   539→        { label: 'Radius', value: `${d.radiusKm} km` },
+   540→   540→        { label: 'Baseline', value: d.baselineLevel },
+   541→   541→        { label: 'Source', value: d.source ?? '—' },
+   542→   542→      ]
+   543→   543→      navigateTarget = 'risk'
+   544→   544→      break
+   545→   545→    }
+   546→   546→    case 'report': {
+   547→   547→      const d = data as ReportItem
+   548→   548→      title = `${d.category.replace(/_/g, ' ')} report`
+   549→   549→      subtitle = 'Community report'
+   550→   550→      coords = { lat: d.lat, lng: d.lng }
+   551→   551→      primaryBadge = <StatusBadge status={d.status} />
+   552→   552→      secondaryBadges = [
+   553→   553→        <Badge key="sev" variant="outline" className="font-semibold border-blue-200 bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
+   554→   554→          {d.severity}
+   555→   555→        </Badge>,
+   556→   556→        <VerificationBadge key="v" status={d.verificationStatus} />,
+   557→   557→      ].filter(Boolean)
+   558→   558→      timeLabel = <span>Reported {formatRelativeTime(d.createdAt)}</span>
+   559→   559→      description = d.description
+   560→   560→      details = [
+   561→   561→        { label: 'Severity', value: d.severity },
+   562→   562→        { label: 'Status', value: d.status.replace(/_/g, ' ') },
+   563→   563→        { label: 'Verification', value: d.verificationStatus.replace(/_/g, ' ') },
+   564→   564→      ]
+   565→   565→      navigateTarget = 'reports'
+   566→   566→      break
+   567→   567→    }
+   568→   568→    case 'facility': {
+   569→   569→      const d = data as FacilityItem
+   570→   570→      title = d.name
+   571→   571→      subtitle = d.facilityType.replace(/_/g, ' ')
+   572→   572→      coords = { lat: d.lat, lng: d.lng }
+   573→   573→      primaryBadge = <StatusBadge status={d.status} />
+   574→   574→      secondaryBadges = [
+   575→   575→        d.capacity != null ? (
+   576→   576→          <Badge key="cap" variant="outline" className="font-semibold border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800">
+   577→   577→            Capacity: {d.capacity}
+   578→   578→          </Badge>
+   579→   579→        ) : null,
+   580→   580→        d.availableUnits != null ? (
+   581→   581→          <Badge key="av" variant="outline" className="font-semibold border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800">
+   582→   582→            Available: {d.availableUnits}
+   583→   583→          </Badge>
+   584→   584→        ) : null,
+   585→   585→      ].filter(Boolean)
+   586→   586→      timeLabel = <span>Status: {d.status}</span>
+   587→   587→      description = `${d.facilityType.replace(/_/g, ' ')} — ${d.status === 'OPEN' ? 'open and operational' : d.status === 'FULL' ? 'currently at capacity' : 'currently closed'}.`
+   588→   588→      details = [
+   589→   589→        { label: 'Type', value: d.facilityType.replace(/_/g, ' ') },
+   590→   590→        { label: 'Status', value: d.status },
+   591→   591→        { label: 'Capacity', value: d.capacity ?? '—' },
+   592→   592→        { label: 'Available units', value: d.availableUnits ?? '—' },
+   593→   593→      ]
+   594→   594→      navigateTarget = 'safe-places'
+   595→   595→      break
+   596→   596→    }
+   597→   597→    case 'region': {
+   598→   598→      const d = data as RegionItem
+   599→   599→      title = d.canonicalName
+   600→   600→      subtitle = `${d.regionType} · ${d.localName ?? '—'}`
+   601→   601→      coords = { lat: d.lat, lng: d.lng }
+   602→   602→      primaryBadge = <StatusBadge status={d.coverageStatus} />
+   603→   603→      secondaryBadges = []
+   604→   604→      timeLabel = <span>{d.regionType}</span>
+   605→   605→      description = `Pilot locality with coverage status: ${d.coverageStatus.replace(/_/g, ' ')}.`
+   606→   606→      details = [
+   607→   607→        { label: 'Type', value: d.regionType },
+   608→   608→        { label: 'Local name', value: d.localName ?? '—' },
+   609→   609→        { label: 'Coverage', value: d.coverageStatus.replace(/_/g, ' ') },
+   610→   610→      ]
+   611→   611→      navigateTarget = null
+   612→   612→      break
+   613→   613→    }
+   614→   614→  }
+   615→   615→
+   616→   616→  return (
+   617→   617→    <div className="flex h-full flex-col">
+   618→   618→      <SheetHeader className="gap-2 border-b px-4 pb-3 pt-4">
+   619→   619→        <div className="flex items-start gap-2 pr-6">
+   620→   620→          <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md ring-1 ring-border bg-muted/40">
+   621→   621→            <MarkerShape shape={meta.shape} color={meta.color} size={16} />
+   622→   622→          </span>
+   623→   623→          <div className="min-w-0">
+   624→   624→            <SheetTitle className="text-base leading-tight">{title}</SheetTitle>
+   625→   625→            <SheetDescription className="text-xs uppercase tracking-wide">{subtitle}</SheetDescription>
+   626→   626→          </div>
+   627→   627→        </div>
+   628→   628→        <div className="flex flex-wrap items-center gap-1.5">
+   629→   629→          {primaryBadge}
+   630→   630→          {secondaryBadges}
+   631→   631→        </div>
+   632→   632→      </SheetHeader>
+   633→   633→
+   634→   634→      <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-3 space-y-4">
+   635→   635→        {coords && (
+   636→   636→          <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs">
+   637→   637→            <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+   638→   638→              <Crosshair className="h-3 w-3" />
+   639→   639→              Coordinates
+   640→   640→            </div>
+   641→   641→            <div className="font-mono text-[12px]">
+   642→   642→              {coords.lat.toFixed(4)}°N · {coords.lng.toFixed(4)}°E
+   643→   643→            </div>
+   644→   644→          </div>
+   645→   645→        )}
+   646→   646→
+   647→   647→        <div>
+   648→   648→          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Description</h4>
+   649→   649→          <p className="text-sm leading-relaxed text-foreground/90">{description}</p>
+   650→   650→        </div>
+   651→   651→
+   652→   652→        {details.length > 0 && (
+   653→   653→          <div>
+   654→   654→            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Details</h4>
+   655→   655→            <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
+   656→   656→              {details.map((d) => (
+   657→   657→                <div key={d.label} className="space-y-0.5">
+   658→   658→                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">{d.label}</dt>
+   659→   659→                  <dd className="text-sm font-medium">{d.value}</dd>
+   660→   660→                </div>
+   661→   661→              ))}
+   662→   662→            </dl>
+   663→   663→          </div>
+   664→   664→        )}
+   665→   665→
+   666→   666→        {timeLabel && (
+   667→   667→          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   668→   668→            <Clock className="h-3 w-3" />
+   669→   669→            {timeLabel}
+   670→   670→          </div>
+   671→   671→        )}
+   672→   672→      </div>
+   673→   673→
+   674→   674→      <div className="border-t px-4 py-3 space-y-2">
+   675→   675→        {navigateTarget ? (
+   676→   676→          <Button
+   677→   677→            className="w-full"
+   678→   678→            onClick={() => onNavigate(navigateTarget)}
+   679→   679→          >
+   680→   680→            View {navigateTarget === 'safe-places' ? 'in Safe Places' : `in ${navigateTarget.charAt(0).toUpperCase() + navigateTarget.slice(1)}`}
+   681→   681→          </Button>
+   682→   682→        ) : (
+   683→   683→          <div className="rounded-md bg-muted/40 px-3 py-2 text-center text-[11px] text-muted-foreground">
+   684→   684→            {kind === 'incident'
+   685→   685→              ? 'Incident details shown on-map. Open the Operations Dashboard to act on this incident.'
+   686→   686→              : 'No further view available for this item.'}
+   687→   687→          </div>
+   688→   688→        )}
+   689→   689→        <Button variant="outline" className="w-full" onClick={() => onNavigate('operations')} disabled={kind !== 'incident'}>
+   690→   690→          Open Operations
+   691→   691→        </Button>
+   692→   692→      </div>
+   693→   693→    </div>
+   694→   694→  )
+   695→   695→}
+   696→   696→
+   697→   697→// ── Top controls bar ────────────────────────────────────────────────
+   698→   698→function TopControlsBar({
+   699→   699→  zoom,
+   700→   700→  setZoom,
+   701→   701→  fullscreen,
+   702→   702→  setFullscreen,
+   703→   703→  onUseMyLocation,
+   704→   704→  onResetExtent,
+   705→   705→}: {
+   706→   706→  zoom: number
+   707→   707→  setZoom: (z: number) => void
+   708→   708→  fullscreen: boolean
+   709→   709→  setFullscreen: (v: boolean) => void
+   710→   710→  onUseMyLocation: () => void
+   711→   711→  onResetExtent: () => void
+   712→   712→}) {
+   713→   713→  const { location, setLocation } = useApp()
+   714→   714→  return (
+   715→   715→    <div className="flex flex-wrap items-center gap-2">
+   716→   716→      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+   717→   717→        <Select
+   718→   718→          value={location.name}
+   719→   719→          onValueChange={(v) => {
+   720→   720→            const region = DEMO_REGIONS.find((r) => r.name === v)
+   721→   721→            if (region) {
+   722→   722→              setLocation({
+   723→   723→                name: region.name,
+   724→   724→                lat: region.lat,
+   725→   725→                lng: region.lng,
+   726→   726→                localName: region.localName,
+   727→   727→              })
+   728→   728→            }
+   729→   729→          }}
+   730→   730→        >
+   731→   731→          <SelectTrigger size="sm" className="h-8 min-w-0 flex-1 sm:w-64">
+   732→   732→            <span className="flex items-center gap-1.5 text-xs">
+   733→   733→              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+   734→   734→              <SelectValue placeholder="Select locality" />
+   735→   735→            </span>
+   736→   736→          </SelectTrigger>
+   737→   737→          <SelectContent>
+   738→   738→            {DEMO_REGIONS.map((r) => (
+   739→   739→              <SelectItem key={r.name} value={r.name}>
+   740→   740→                <div className="flex flex-col gap-0 py-0.5">
+   741→   741→                  <span className="text-[13px] font-medium">{r.name}</span>
+   742→   742→                  <span className="text-[10px] text-muted-foreground">{r.localName} · {r.state}</span>
+   743→   743→                </div>
+   744→   744→              </SelectItem>
+   745→   745→            ))}
+   746→   746→          </SelectContent>
+   747→   747→        </Select>
+   748→   748→      </div>
+   749→   749→
+   750→   750→      <div className="flex items-center gap-1">
+   751→   751→        <Button
+   752→   752→          variant="outline"
+   753→   753→          size="sm"
+   754→   754→          className="h-8 gap-1.5"
+   755→   755→          onClick={onUseMyLocation}
+   756→   756→          aria-label="Use my location"
+   757→   757→        >
+   758→   758→          <LocateFixed className="h-3.5 w-3.5" />
+   759→   759→          <span className="hidden sm:inline text-xs">My location</span>
+   760→   760→        </Button>
+   761→   761→
+   762→   762→        <div className="flex items-center rounded-md border bg-background">
+   763→   763→          <Button
+   764→   764→            variant="ghost"
+   765→   765→            size="icon"
+   766→   766→            className="h-8 w-8 rounded-r-none"
+   767→   767→            onClick={() => setZoom(Math.max(1, zoom - 1))}
+   768→   768→            aria-label="Zoom out"
+   769→   769→          >
+   770→   770→            <Minus className="h-3.5 w-3.5" />
+   771→   771→          </Button>
+   772→   772→          <span className="px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground select-none">{zoom}x</span>
+   773→   773→          <Button
+   774→   774→            variant="ghost"
+   775→   775→            size="icon"
+   776→   776→            className="h-8 w-8 rounded-l-none"
+   777→   777→            onClick={() => setZoom(Math.min(5, zoom + 1))}
+   778→   778→            aria-label="Zoom in"
+   779→   779→          >
+   780→   780→            <Plus className="h-3.5 w-3.5" />
+   781→   781→          </Button>
+   782→   782→        </div>
+   783→   783→
+   784→   784→        <Button
+   785→   785→          variant="outline"
+   786→   786→          size="icon"
+   787→   787→          className="h-8 w-8"
+   788→   788→          onClick={onResetExtent}
+   789→   789→          aria-label="Reset map extent"
+   790→   790→        >
+   791→   791→          <RotateCcw className="h-3.5 w-3.5" />
+   792→   792→        </Button>
+   793→   793→
+   794→   794→        <Button
+   795→   795→          variant="outline"
+   796→   796→          size="icon"
+   797→   797→          className="h-8 w-8"
+   798→   798→          onClick={() => setFullscreen(!fullscreen)}
+   799→   799→          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+   800→   800→        >
+   801→   801→          {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+   802→   802→        </Button>
+   803→   803→      </div>
+   804→   804→    </div>
+   805→   805→  )
+   806→   806→}
+   807→   807→
+   808→   808→// ── Bottom time slider ──────────────────────────────────────────────
+   809→   809→function TimeSlider({ lastUpdated }: { lastUpdated: Date | null }) {
+   810→   810→  const [value, setValue] = React.useState<number>(100)
+   811→   811→  return (
+   812→   812→    <div className="mt-3 flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+   813→   813→      <div className="flex items-center gap-1.5 text-xs font-medium shrink-0">
+   814→   814→        <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-soft-pulse" />
+   815→   815→        <span className="text-emerald-700 dark:text-emerald-400">Live</span>
+   816→   816→      </div>
+   817→   817→      <div className="flex-1 flex items-center gap-3">
+   818→   818→        <Slider
+   819→   819→          value={[value]}
+   820→   820→          onValueChange={(v) => setValue(v[0])}
+   821→   821→          min={0}
+   822→   822→          max={100}
+   823→   823→          step={1}
+   824→   824→          aria-label="Time scrubber — last 24 hours"
+   825→   825→          className="flex-1"
+   826→   826→        />
+   827→   827→        <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 min-w-[120px] text-right">
+   828→   828→          {value === 100 ? 'Now' : `${Math.round((100 - value) * 24 / 100)}h ago`}
+   829→   829→        </span>
+   830→   830→      </div>
+   831→   831→      <Separator orientation="vertical" className="hidden sm:block h-5" />
+   832→   832→      <span className="hidden sm:block text-[11px] text-muted-foreground shrink-0">
+   833→   833→        <Clock className="inline h-3 w-3 mr-1" />
+   834→   834→        Data as of {lastUpdated ? formatRelativeTime(lastUpdated) : '—'}
+   835→   835→      </span>
+   836→   836→    </div>
+   837→   837→  )
+   838→   838→}
+   839→   839→
+   840→   840→// ── Loading skeleton ────────────────────────────────────────────────
+   841→   841→function MapSkeleton() {
+   842→   842→  return (
+   843→   843→    <div className="space-y-3">
+   844→   844→      <div className="flex gap-2">
+   845→   845→        <Skeleton className="h-8 w-40" />
+   846→   846→        <Skeleton className="h-8 w-32" />
+   847→   847→        <Skeleton className="h-8 w-24 ml-auto" />
+   848→   848→      </div>
+   849→   849→      <Skeleton className="h-[60vh] md:h-[70vh] w-full rounded-xl" />
+   850→   850→    </div>
+   851→   851→  )
+   852→   852→}
+   853→   853→
+   854→   854→// ── Main MapView ────────────────────────────────────────────────────
+   855→   855→export default function MapView() {
+   856→   856→  const { location, setLocation, setView, role } = useApp()
+   857→   857→  const [data, setData] = React.useState<MapData | null>(null)
+   858→   858→  const [loading, setLoading] = React.useState(true)
+   859→   859→  const [error, setError] = React.useState<string | null>(null)
+   860→   860→  const [layers, setLayers] = React.useState<Record<LayerKey, boolean>>({
+   861→   861→    incidents: LAYER_META.incidents.defaultOn,
+   862→   862→    alerts: LAYER_META.alerts.defaultOn,
+   863→   863→    hazardZones: LAYER_META.hazardZones.defaultOn,
+   864→   864→    reports: LAYER_META.reports.defaultOn,
+   865→   865→    facilities: LAYER_META.facilities.defaultOn,
+   866→   866→    regions: LAYER_META.regions.defaultOn,
+   867→   867→  })
+   868→   868→  const [zoom, setZoom] = React.useState<number>(2)
+   869→   869→  const [fullscreen, setFullscreen] = React.useState(false)
+   870→   870→  const [selected, setSelected] = React.useState<SelectedMarker | null>(null)
+   871→   871→  const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null)
+   872→   872→  const containerRef = React.useRef<HTMLDivElement | null>(null)
+   873→   873→
+   874→   874→  // Fetch map data whenever the selected location changes.
+   875→   875→  const fetchData = React.useCallback(async () => {
+   876→   876→    setLoading(true)
+   877→   877→    setError(null)
+   878→   878→    try {
+   879→   879→      const qs = new URLSearchParams({
+   880→   880→        lat: String(location.lat),
+   881→   881→        lng: String(location.lng),
+   882→   882→      })
+   883→   883→      const res = await apiGet<MapData>(`/api/map?${qs.toString()}`)
+   884→   884→      setData(res)
+   885→   885→      setLastUpdated(new Date())
+   886→   886→    } catch (err) {
+   887→   887→      console.error('[map-view] fetch failed', err)
+   888→   888→      setError(err instanceof Error ? err.message : 'Failed to load map data')
+   889→   889→      toast.error('Failed to load map data. Showing cached view if available.')
+   890→   890→    } finally {
+   891→   891→      setLoading(false)
+   892→   892→    }
+   893→   893→  }, [location.lat, location.lng])
+   894→   894→
+   895→   895→  React.useEffect(() => {
+   896→   896→    fetchData()
+   897→   897→  }, [fetchData])
+   898→   898→
+   899→   899→  // Geolocation handler — wrapped in try/catch; client-only.
+   900→   900→  const useMyLocation = React.useCallback(async () => {
+   901→   901→    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+   902→   902→      toast.error('Geolocation is not supported on this device.')
+   903→   903→      return
+   904→   904→    }
+   905→   905→    try {
+   906→   906→      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+   907→   907→        navigator.geolocation.getCurrentPosition(resolve, reject, {
+   908→   908→          enableHighAccuracy: false,
+   909→   909→          timeout: 10000,
+   910→   910→          maximumAge: 5 * 60 * 1000,
+   911→   911→        })
+   912→   912→      })
+   913→   913→      const lat = pos.coords.latitude
+   914→   914→      const lng = pos.coords.longitude
+   915→   915→      // Find nearest demo region for label; if outside bounds, just label "My location".
+   916→   916→      let nearest: (typeof DEMO_REGIONS)[number] = DEMO_REGIONS[0]
+   917→   917→      let best = Number.POSITIVE_INFINITY
+   918→   918→      for (const r of DEMO_REGIONS) {
+   919→   919→        const d = distanceKm(lat, lng, r.lat, r.lng)
+   920→   920→        if (d < best) {
+   921→   921→          best = d
+   922→   922→          nearest = r
+   923→   923→        }
+   924→   924→      }
+   925→   925→      const inBounds =
+   926→   926→        lat >= MAP_BOUNDS.minLat && lat <= MAP_BOUNDS.maxLat && lng >= MAP_BOUNDS.minLng && lng <= MAP_BOUNDS.maxLng
+   927→   927→      setLocation({
+   928→   928→        name: inBounds && best < 50 ? nearest.name : 'My location',
+   929→   929→        lat,
+   930→   930→        lng,
+   931→   931→        localName: inBounds && best < 50 ? nearest.localName : undefined,
+   932→   932→      })
+   933→   933→      toast.success(`Location set to ${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E`)
+   934→   934→    } catch (err: any) {
+   935→   935→      if (err?.code === err?.PERMISSION_DENIED) {
+   936→   936→        toast.error('Location permission denied — please select a locality')
+   937→   937→      } else if (err?.code === err?.TIMEOUT) {
+   938→   938→        toast.error('Could not get a fix on your location. Try again.')
+   939→   939→      } else {
+   940→   940→        toast.error('Location unavailable — please select a locality')
+   941→   941→      }
+   942→   942→    }
+   943→   943→  }, [setLocation])
+   944→   944→
+   945→   945→  const resetExtent = React.useCallback(() => {
+   946→   946→    setZoom(2)
+   947→   947→    setFullscreen(false)
+   948→   948→  }, [])
+   949→   949→
+   950→   950→  const onNavigate = React.useCallback(
+   951→   951→    (target: 'alerts' | 'reports' | 'safe-places' | 'risk' | 'operations') => {
+   952→   952→      setSelected(null)
+   953→   953→      // For incidents/operations dashboard: restrict to ops roles.
+   954→   954→      if (target === 'operations') {
+   955→   955→        const opsRoles: string[] = ['DISTRICT_OPERATOR', 'STATE_OPERATOR', 'ADMIN']
+   956→   956→        if (!opsRoles.includes(role)) {
+   957→   957→          toast.info('Operations dashboard requires an operator role.')
+   958→   958→          return
+   959→   959→        }
+   960→   960→      }
+   961→   961→      setView(target)
+   962→   962→    },
+   963→   963→    [role, setView]
+   964→   964→  )
+   965→   965→
+   966→   966→  // Marker sizing & label visibility based on zoom.
+   967→   967→  const markerSize = 16 + (zoom - 1) * 3 // 16..28
+   968→   968→  const showLabels = zoom >= 3
+   969→   969→
+   970→   970→  // Selected location projection.
+   971→   971→  const sel = projectLatLng(location.lat, location.lng)
+   972→   972→
+   973→   973→  // Compute counts.
+   974→   974→  const counts: Record<LayerKey, number> = {
+   975→   975→    incidents: data?.incidents.length ?? 0,
+   976→   976→    alerts: data?.alerts.length ?? 0,
+   977→   977→    hazardZones: data?.hazardZones.length ?? 0,
+   978→   978→    reports: data?.reports.length ?? 0,
+   979→   979→    facilities: data?.facilities.length ?? 0,
+   980→   980→    regions: data?.regions.length ?? 0,
+   981→   981→  }
+   982→   982→
+   983→   983→  const isOpsRole = ['DISTRICT_OPERATOR', 'STATE_OPERATOR', 'ADMIN'].includes(role)
+   984→   984→
+   985→   985→  return (
+   986→   986→    <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-6">
+   987→   987→      {/* Page header */}
+   988→   988→      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+   989→   989→        <div>
+   990→   990→          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl">
+   991→   991→            <MapIcon className="h-5 w-5 text-muted-foreground" />
+   992→   992→            Live Map
+   993→   993→            <Badge variant="outline" className="ml-1 gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800 text-[10px] font-semibold">
+   994→   994→              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-soft-pulse" />
+   995→   995→              SIMULATED FEED
+   996→   996→            </Badge>
+   997→   997→          </h1>
+   998→   998→          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+   999→   999→            Custom topographic overlay for the Himalayan &amp; North Eastern Region — incidents, alerts, hazard zones, facilities and community reports.
+  1000→  1000→          </p>
+  1001→  1001→        </div>
+  1002→  1002→        {isOpsRole && (
+  1003→  1003→          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setView('operations')}>
+  1004→  1004→            <Activity className="h-3.5 w-3.5" />
+  1005→  1005→            Operations Dashboard
+  1006→  1006→          </Button>
+  1007→  1007→        )}
+  1008→  1008→      </div>
+  1009→  1009→
+  1010→  1010→      {/* Top controls */}
+  1011→  1011→      <div className="mb-3">
+  1012→  1012→        <TopControlsBar
+  1013→  1013→          zoom={zoom}
+  1014→  1014→          setZoom={setZoom}
+  1015→  1015→          fullscreen={fullscreen}
+  1016→  1016→          setFullscreen={setFullscreen}
+  1017→  1017→          onUseMyLocation={useMyLocation}
+  1018→  1018→          onResetExtent={resetExtent}
+  1019→  1019→        />
+  1020→  1020→      </div>
+  1021→  1021→
+  1022→  1022→      {/* Map */}
+  1023→  1023→      {loading && !data ? (
+  1024→  1024→        <MapSkeleton />
+  1025→  1025→      ) : error && !data ? (
+  1026→  1026→        <Card className="p-6">
+  1027→  1027→          <CardContent className="space-y-3 text-center">
+  1028→  1028→            <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
+  1029→  1029→            <p className="text-sm font-medium">Could not load map data.</p>
+  1030→  1030→            <p className="text-xs text-muted-foreground">{error}</p>
+  1031→  1031→            <Button size="sm" variant="outline" onClick={fetchData}>
+  1032→  1032→              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+  1033→  1033→              Retry
+  1034→  1034→            </Button>
+  1035→  1035→          </CardContent>
+  1036→  1036→        </Card>
+  1037→  1037→      ) : (
+  1038→  1038→        <>
+  1039→  1039→          <div
+  1040→  1040→            ref={containerRef}
+  1041→  1041→            className={cn(
+  1042→  1042→              'relative w-full overflow-hidden rounded-xl border bg-slate-200 dark:bg-slate-800',
+  1043→  1043→              fullscreen ? 'h-[calc(100vh-7rem)]' : 'h-[60vh] md:h-[70vh]'
+  1044→  1044→            )}
+  1045→  1045→          >
+  1046→  1046→            {/* Background image — falls back to bg-slate-200 if missing */}
+  1047→  1047→            <div
+  1048→  1048→              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+  1049→  1049→              style={{ backgroundImage: "url('/map-bg.png')" }}
+  1050→  1050→              aria-hidden
+  1051→  1051→            />
+  1052→  1052→            {/* Dark overlay for marker legibility */}
+  1053→  1053→            <div className="absolute inset-0 bg-slate-900/20 dark:bg-slate-950/40" aria-hidden />
+  1054→  1054→            {/* Faint lat/lng grid */}
+  1055→  1055→            <MapGrid />
+  1056→  1056→
+  1057→  1057→            {/* North + extent labels */}
+  1058→  1058→            <div className="pointer-events-none absolute top-3 right-1/2 translate-x-1/2 z-10 flex flex-col items-center gap-0.5 text-[10px] font-semibold uppercase tracking-widest text-foreground/50">
+  1059→  1059→              <Compass className="h-3 w-3" />
+  1060→  1060→              N
+  1061→  1061→            </div>
+  1062→  1062→            <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 z-10 text-[10px] font-medium text-foreground/40">
+  1063→  1063→              {MAP_BOUNDS.minLat}–{MAP_BOUNDS.maxLat}°N · {MAP_BOUNDS.minLng}–{MAP_BOUNDS.maxLng}°E
+  1064→  1064→            </div>
+  1065→  1065→
+  1066→  1066→            {/* Layer panel */}
+  1067→  1067→            <LayerPanel layers={layers} setLayers={setLayers} counts={counts} />
+  1068→  1068→
+  1069→  1069→            {/* Legend */}
+  1070→  1070→            <Legend layers={layers} />
+  1071→  1071→
+  1072→  1072→            {/* Markers */}
+  1073→  1073→            <div className="absolute inset-0">
+  1074→  1074→              {/* Selected location pulsing marker (always on) */}
+  1075→  1075→              <SelectedLocationMarker
+  1076→  1076→                x={sel.x}
+  1077→  1077→                y={sel.y}
+  1078→  1078→                label={location.name}
+  1079→  1079→                showLabel={showLabels || zoom >= 2}
+  1080→  1080→              />
+  1081→  1081→
+  1082→  1082→              {/* Regions */}
+  1083→  1083→              {layers.regions &&
+  1084→  1084→                data?.regions.map((r) => {
+  1085→  1085→                  const p = projectLatLng(r.lat, r.lng)
+  1086→  1086→                  if (p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100) return null
+  1087→  1087→                  return (
+  1088→  1088→                    <MapMarker
+  1089→  1089→                      key={`region-${r.id}`}
+  1090→  1090→                      x={p.x}
+  1091→  1091→                      y={p.y}
+  1092→  1092→                      shape={LAYER_META.regions.shape}
+  1093→  1093→                      color={LAYER_META.regions.color}
+  1094→  1094→                      label={r.canonicalName}
+  1095→  1095→                      showLabel={showLabels}
+  1096→  1096→                      size={12}
+  1097→  1097→                      tooltip={`Region: ${r.canonicalName} (${r.regionType})`}
+  1098→  1098→                      onClick={() => setSelected({ kind: 'region', data: r })}
+  1099→  1099→                    />
+  1100→  1100→                  )
+  1101→  1101→                })}
+  1102→  1102→
+  1103→  1103→              {/* Hazard zones — render as soft circles first (rings), then center marker */}
+  1104→  1104→              {layers.hazardZones &&
+  1105→  1105→                data?.hazardZones.map((hz) => {
+  1106→  1106→                  const p = projectLatLng(hz.lat, hz.lng)
+  1107→  1107→                  if (p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100) return null
+  1108→  1108→                  // Approximate radius in % of map width — rough visual cue only.
+  1109→  1109→                  const radiusPct = Math.min(8, Math.max(1.5, (hz.radiusKm / 100) * 100 * 0.4))
+  1110→  1110→                  return (
+  1111→  1111→                    <div
+  1112→  1112→                      key={`hz-ring-${hz.id}`}
+  1113→  1113→                      className="absolute z-10 pointer-events-none"
+  1114→  1114→                      style={{
+  1115→  1115→                        left: `${p.x}%`,
+  1116→  1116→                        top: `${p.y}%`,
+  1117→  1117→                        transform: 'translate(-50%, -50%)',
+  1118→  1118→                      }}
+  1119→  1119→                    >
+  1120→  1120→                      <div
+  1121→  1121→                        className="rounded-full border-2 border-amber-500/40 bg-amber-500/10"
+  1122→  1122→                        style={{ width: `${radiusPct * 2}%`, height: `${radiusPct * 2}%` }}
+  1123→  1123→                      />
+  1124→  1124→                    </div>
+  1125→  1125→                  )
+  1126→  1126→                })}
+  1127→  1127→              {layers.hazardZones &&
+  1128→  1128→                data?.hazardZones.map((hz) => {
+  1129→  1129→                  const p = projectLatLng(hz.lat, hz.lng)
+  1130→  1130→                  if (p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100) return null
+  1131→  1131→                  return (
+  1132→  1132→                    <MapMarker
+  1133→  1133→                      key={`hz-${hz.id}`}
+  1134→  1134→                      x={p.x}
+  1135→  1135→                      y={p.y}
+  1136→  1136→                      shape={LAYER_META.hazardZones.shape}
+  1137→  1137→                      color={LAYER_META.hazardZones.color}
+  1138→  1138→                      label={hz.name}
+  1139→  1139→                      showLabel={showLabels}
+  1140→  1140→                      size={markerSize}
+  1141→  1141→                      tooltip={`${hz.name} — ${hz.hazardType.replace(/_/g, ' ')} (${hz.baselineLevel})`}
+  1142→  1142→                      onClick={() => setSelected({ kind: 'hazardZone', data: hz })}
+  1143→  1143→                    />
+  1144→  1144→                  )
+  1145→  1145→                })}
+  1146→  1146→
+  1147→  1147→              {/* Facilities */}
+  1148→  1148→              {layers.facilities &&
+  1149→  1149→                data?.facilities.map((f) => {
+  1150→  1150→                  const p = projectLatLng(f.lat, f.lng)
+  1151→  1151→                  if (p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100) return null
+  1152→  1152→                  const color = f.status === 'FULL' ? '#9ca3af' : f.status === 'CLOSED' ? '#6b7280' : LAYER_META.facilities.color
+  1153→  1153→                  return (
+  1154→  1154→                    <MapMarker
+  1155→  1155→                      key={`fac-${f.id}`}
+  1156→  1156→                      x={p.x}
+  1157→  1157→                      y={p.y}
+  1158→  1158→                      shape={LAYER_META.facilities.shape}
+  1159→  1159→                      color={color}
+  1160→  1160→                      label={f.name}
+  1161→  1161→                      showLabel={showLabels}
+  1162→  1162→                      size={markerSize}
+  1163→  1163→                      tooltip={`${f.name} — ${f.facilityType.replace(/_/g, ' ')} · ${f.status}`}
+  1164→  1164→                      onClick={() => setSelected({ kind: 'facility', data: f })}
+  1165→  1165→                    />
+  1166→  1166→                  )
+  1167→  1167→                })}
+  1168→  1168→
+  1169→  1169→              {/* Community reports */}
+  1170→  1170→              {layers.reports &&
+  1171→  1171→                data?.reports.map((rp) => {
+  1172→  1172→                  const p = projectLatLng(rp.lat, rp.lng)
+  1173→  1173→                  if (p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100) return null
+  1174→  1174→                  return (
+  1175→  1175→                    <MapMarker
+  1176→  1176→                      key={`rep-${rp.id}`}
+  1177→  1177→                      x={p.x}
+  1178→  1178→                      y={p.y}
+  1179→  1179→                      shape={LAYER_META.reports.shape}
+  1180→  1180→                      color={LAYER_META.reports.color}
+  1181→  1181→                      label={`${rp.category.replace(/_/g, ' ')} report`}
+  1182→  1182→                      showLabel={showLabels}
+  1183→  1183→                      size={markerSize}
+  1184→  1184→                      tooltip={`${rp.category.replace(/_/g, ' ')} report — ${rp.severity}`}
+  1185→  1185→                      onClick={() => setSelected({ kind: 'report', data: rp })}
+  1186→  1186→                    />
+  1187→  1187→                  )
+  1188→  1188→                })}
+  1189→  1189→
+  1190→  1190→              {/* Alerts */}
+  1191→  1191→              {layers.alerts &&
+  1192→  1192→                data?.alerts.map((al) => {
+  1193→  1193→                  const p = projectLatLng(al.lat, al.lng)
+  1194→  1194→                  if (p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100) return null
+  1195→  1195→                  const color =
+  1196→  1196→                    al.severity === 'EMERGENCY' || al.severity === 'WARNING'
+  1197→  1197→                      ? '#dc2626'
+  1198→  1198→                      : al.severity === 'WATCH'
+  1199→  1199→                      ? '#ea580c'
+  1200→  1200→                      : LAYER_META.alerts.color
+  1201→  1201→                  return (
+  1202→  1202→                    <MapMarker
+  1203→  1203→                      key={`al-${al.id}`}
+  1204→  1204→                      x={p.x}
+  1205→  1205→                      y={p.y}
+  1206→  1206→                      shape={LAYER_META.alerts.shape}
+  1207→  1207→                      color={color}
+  1208→  1208→                      label={al.title}
+  1209→  1209→                      showLabel={showLabels}
+  1210→  1210→                      size={markerSize + 2}
+  1211→  1211→                      tooltip={`${al.title} — ${al.severity}`}
+  1212→  1212→                      onClick={() => setSelected({ kind: 'alert', data: al })}
+  1213→  1213→                    />
+  1214→  1214→                  )
+  1215→  1215→                })}
+  1216→  1216→
+  1217→  1217→              {/* Incidents (rendered last, on top) */}
+  1218→  1218→              {layers.incidents &&
+  1219→  1219→                data?.incidents.map((inc) => {
+  1220→  1220→                  const p = projectLatLng(inc.lat, inc.lng)
+  1221→  1221→                  if (p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100) return null
+  1222→  1222→                  return (
+  1223→  1223→                    <MapMarker
+  1224→  1224→                      key={`inc-${inc.id}`}
+  1225→  1225→                      x={p.x}
+  1226→  1226→                      y={p.y}
+  1227→  1227→                      shape={LAYER_META.incidents.shape}
+  1228→  1228→                      color={LAYER_META.incidents.color}
+  1229→  1229→                      label={inc.incidentCode}
+  1230→  1230→                      showLabel={showLabels}
+  1231→  1231→                      size={markerSize + 2}
+  1232→  1232→                      tooltip={`${inc.incidentCode} — ${inc.incidentType.replace(/_/g, ' ')} · ${inc.priority}`}
+  1233→  1233→                      onClick={() => setSelected({ kind: 'incident', data: inc })}
+  1234→  1234→                    />
+  1235→  1235→                  )
+  1236→  1236→                })}
+  1237→  1237→            </div>
+  1238→  1238→
+  1239→  1239→            {/* Hover hint when nothing selected */}
+  1240→  1240→            <div className="pointer-events-none absolute bottom-2 right-2 z-10 hidden md:block">
+  1241→  1241→              <span className="rounded-md bg-background/70 px-2 py-1 text-[10px] text-muted-foreground ring-1 ring-border/40 backdrop-blur">
+  1242→  1242→                <Radio className="inline h-3 w-3 mr-1" />
+  1243→  1243→                Click any marker for details
+  1244→  1244→              </span>
+  1245→  1245→            </div>
+  1246→  1246→          </div>
+  1247→  1247→
+  1248→  1248→          {/* Time slider */}
+  1249→  1249→          <TimeSlider lastUpdated={lastUpdated} />
+  1250→  1250→
+  1251→  1251→          {/* Summary chips */}
+  1252→  1252→          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+  1253→  1253→            <span className="text-[11px] text-muted-foreground">Active layers:</span>
+  1254→  1254→            {(Object.keys(layers) as LayerKey[]).filter((k) => layers[k]).map((k) => (
+  1255→  1255→              <Badge key={k} variant="outline" className="gap-1 text-[11px]">
+  1256→  1256→                <span className="inline-flex h-2 w-2 items-center justify-center">
+  1257→  1257→                  <MarkerShape shape={LAYER_META[k].shape} color={LAYER_META[k].color} size={10} />
+  1258→  1258→                </span>
+  1259→  1259→                {LAYER_META[k].label}
+  1260→  1260→                <span className="ml-1 tabular-nums text-muted-foreground">{counts[k]}</span>
+  1261→  1261→              </Badge>
+  1262→  1262→            ))}
+  1263→  1263→            {error && (
+  1264→  1264→              <Badge variant="outline" className="text-[11px] border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800">
+  1265→  1265→                Partial data
+  1266→  1266→              </Badge>
+  1267→  1267→            )}
+  1268→  1268→          </div>
+  1269→  1269→        </>
+  1270→  1270→      )}
+  1271→  1271→
+  1272→  1272→      {/* Marker detail drawer */}
+  1273→  1273→      <MarkerDrawer selected={selected} onClose={() => setSelected(null)} onNavigate={onNavigate} />
+  1274→  1274→    </div>
+  1275→  1275→  )
+  1276→  1276→}
+  1277→  1277→

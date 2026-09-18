@@ -1,0 +1,904 @@
+     1→'use client'
+     2→
+     3→import * as React from 'react'
+     4→import { useApp } from '@/lib/store'
+     5→import { apiGet } from '@/lib/api-client'
+     6→import { formatRelativeTime, type ModelRiskLevel, type HazardType } from '@/lib/constants'
+     7→import { Card } from '@/components/ui/card'
+     8→import { Button } from '@/components/ui/button'
+     9→import { Badge } from '@/components/ui/badge'
+    10→import { Separator } from '@/components/ui/separator'
+    11→import { Skeleton } from '@/components/ui/skeleton'
+    12→import { Progress } from '@/components/ui/progress'
+    13→import {
+    14→  ModelRiskBadge,
+    15→  HazardBadge,
+    16→  DemoBadge,
+    17→  SimulationBadge,
+    18→  StatusBadge,
+    19→  HazardIcon,
+    20→} from '@/components/shared/badges'
+    21→import {
+    22→  Siren, ShieldCheck, Megaphone, Newspaper, TrendingUp, TrendingDown, Minus,
+    23→  Clock, MapPin, ExternalLink, Droplets, Thermometer, Wind, Cloud, RefreshCw,
+    24→  AlertTriangle, CheckCircle2, ListChecks, ChevronRight, Wifi, WifiOff,
+    25→  Building2, Activity,
+    26→} from 'lucide-react'
+    27→import { cn } from '@/lib/utils'
+    28→
+    29→// ── Types (mirror /api/home response) ────────────────────────────────────
+    30→type RiskLevel = 'LOW' | 'MODERATE' | 'HIGH' | 'VERY_HIGH'
+    31→type Trend = 'up' | 'down' | 'steady'
+    32→
+    33→interface RiskSummaryItem {
+    34→  hazard: string
+    35→  level: RiskLevel
+    36→  score: number
+    37→  confidence: number
+    38→  dataCoveragePct: number
+    39→  trend: Trend
+    40→  sourceFreshnessMinutes: number
+    41→  modelVersion: string
+    42→  simulationMode: boolean
+    43→  note?: string
+    44→}
+    45→
+    46→interface WeatherData {
+    47→  stationName: string | null
+    48→  rainfall24hMm: number
+    49→  rainfall1hMm: number
+    50→  temperatureC: number
+    51→  humidityPct: number
+    52→  windKph: number
+    53→  observedAt: string
+    54→  demoLabel: boolean
+    55→  distanceKm: number
+    56→}
+    57→
+    58→interface AlertItem {
+    59→  id: string
+    60→  title: string
+    61→  severity: string
+    62→  alertType: string
+    63→  issuerName: string
+    64→  issuedAt: string
+    65→  expiresAt: string
+    66→  verificationStatus: string
+    67→  simulationMode: boolean
+    68→  lat: number | null
+    69→  lng: number | null
+    70→  distanceKm: number | null
+    71→}
+    72→
+    73→interface NewsItemData {
+    74→  id: string
+    75→  title: string
+    76→  summary: string
+    77→  publisher: string
+    78→  sourceUrl: string
+    79→  publishedAt: string
+    80→  demoLabel: boolean
+    81→  pinned: boolean
+    82→}
+    83→
+    84→interface FacilityItem {
+    85→  id: string
+    86→  name: string
+    87→  facilityType: string
+    88→  lat: number
+    89→  lng: number
+    90→  status: string
+    91→  capacity: number | null
+    92→  availableUnits: number | null
+    93→  distanceKm: number
+    94→}
+    95→
+    96→interface PreparednessTipData {
+    97→  slug: string
+    98→  title: string
+    99→  excerpt: string
+   100→  hazardType: string | null
+   101→}
+   102→
+   103→interface HomePayload {
+   104→  riskSummary: RiskSummaryItem[]
+   105→  weather: WeatherData | null
+   106→  activeAlerts: AlertItem[]
+   107→  news: NewsItemData[]
+   108→  preparednessTip: PreparednessTipData | null
+   109→  nearbyFacilities: FacilityItem[]
+   110→  locationMeta: {
+   111→    name: string
+   112→    lat: number
+   113→    lng: number
+   114→    lastUpdated: string
+   115→  }
+   116→}
+   117→
+   118→const HAZARD_ORDER: string[] = ['LANDSLIDE', 'FLASH_FLOOD', 'HEAVY_RAIN', 'ROAD_BLOCK', 'EARTHQUAKE']
+   119→
+   120→const TREND_ICON: Record<Trend, React.ComponentType<{ className?: string }>> = {
+   121→  up: TrendingUp,
+   122→  down: TrendingDown,
+   123→  steady: Minus,
+   124→}
+   125→
+   126→const TREND_TONE: Record<Trend, string> = {
+   127→  up: 'text-orange-500 dark:text-orange-400',
+   128→  down: 'text-emerald-500 dark:text-emerald-400',
+   129→  steady: 'text-muted-foreground',
+   130→}
+   131→
+   132→const RISK_RANK: Record<RiskLevel, number> = { LOW: 0, MODERATE: 1, HIGH: 2, VERY_HIGH: 3 }
+   133→
+   134→function computeOverallRisk(summary: RiskSummaryItem[]): RiskLevel {
+   135→  let max: RiskLevel = 'LOW'
+   136→  for (const r of summary) {
+   137→    if (RISK_RANK[r.level] > RISK_RANK[max]) max = r.level
+   138→  }
+   139→  return max
+   140→}
+   141→
+   142→// Personalized actionable checklist derived from current risk levels + weather.
+   143→function generateChecklist(
+   144→  summary: RiskSummaryItem[],
+   145→  weather: WeatherData | null
+   146→): { text: string; tone: 'critical' | 'caution' | 'info' }[] {
+   147→  const byHazard: Record<string, RiskSummaryItem | undefined> = {}
+   148→  for (const r of summary) byHazard[r.hazard] = r
+   149→
+   150→  const items: { text: string; tone: 'critical' | 'caution' | 'info' }[] = []
+   151→
+   152→  const landslide = byHazard['LANDSLIDE']
+   153→  if (landslide?.level === 'HIGH' || landslide?.level === 'VERY_HIGH') {
+   154→    items.push({ text: 'Move away from steep slopes and the base of hills; watch for new ground cracks.', tone: 'critical' })
+   155→  } else if (landslide?.level === 'MODERATE') {
+   156→    items.push({ text: 'Stay alert for landslide warning signs: cracks, tilting poles, muddy springs.', tone: 'caution' })
+   157→  }
+   158→
+   159→  const flash = byHazard['FLASH_FLOOD']
+   160→  if (flash?.level === 'HIGH' || flash?.level === 'VERY_HIGH') {
+   161→    items.push({ text: 'Move to higher ground; avoid river crossings and low-lying areas.', tone: 'critical' })
+   162→  } else if (flash?.level === 'MODERATE') {
+   163→    items.push({ text: 'Avoid riverbanks and stream crossings until conditions improve.', tone: 'caution' })
+   164→  }
+   165→
+   166→  const rain = byHazard['HEAVY_RAIN']
+   167→  if (rain?.level === 'HIGH' || rain?.level === 'VERY_HIGH') {
+   168→    items.push({ text: 'Avoid non-essential travel; secure household items and clear drains.', tone: 'critical' })
+   169→  } else if (weather && weather.rainfall24hMm > 50) {
+   170→    items.push({ text: 'Clear drains and avoid low-lying crossings — recent rainfall is elevated.', tone: 'caution' })
+   171→  }
+   172→
+   173→  const road = byHazard['ROAD_BLOCK']
+   174→  if (road?.level === 'HIGH' || road?.level === 'VERY_HIGH') {
+   175→    items.push({ text: 'Confirm road status before travel; keep an alternate route in mind.', tone: 'caution' })
+   176→  }
+   177→
+   178→  const quake = byHazard['EARTHQUAKE']
+   179→  if (quake?.level === 'HIGH' || quake?.level === 'VERY_HIGH') {
+   180→    items.push({ text: 'Review Drop–Cover–Hold On with your family; identify safe spots in each room.', tone: 'caution' })
+   181→  }
+   182→
+   183→  // Always-on general preparedness items (keep this list useful even when low risk)
+   184→  items.push({ text: 'Keep your phone charged and a power bank ready.', tone: 'info' })
+   185→  items.push({ text: 'Review your family communication plan and emergency contacts.', tone: 'info' })
+   186→  items.push({ text: 'Keep your emergency go-bag updated (water, medicines, documents).', tone: 'info' })
+   187→
+   188→  return items.slice(0, 6)
+   189→}
+   190→
+   191→// ── Main view ───────────────────────────────────────────────────────────
+   192→export default function HomeView() {
+   193→  const { location, setView, connectivity } = useApp()
+   194→  const [data, setData] = React.useState<HomePayload | null>(null)
+   195→  const [loading, setLoading] = React.useState<boolean>(true)
+   196→  const [error, setError] = React.useState<string | null>(null)
+   197→
+   198→  const load = React.useCallback(() => {
+   199→    let cancelled = false
+   200→    setLoading(true)
+   201→    setError(null)
+   202→    const url = `/api/home?lat=${encodeURIComponent(location.lat)}&lng=${encodeURIComponent(location.lng)}&name=${encodeURIComponent(location.name)}`
+   203→    apiGet<HomePayload>(url)
+   204→      .then((d) => {
+   205→        if (cancelled) return
+   206→        setData(d)
+   207→        setLoading(false)
+   208→      })
+   209→      .catch((e: unknown) => {
+   210→        if (cancelled) return
+   211→        const msg = e instanceof Error ? e.message : 'Failed to load home data.'
+   212→        setError(msg)
+   213→        setLoading(false)
+   214→      })
+   215→    return () => {
+   216→      cancelled = true
+   217→    }
+   218→  }, [location.lat, location.lng, location.name])
+   219→
+   220→  React.useEffect(() => load(), [load])
+   221→
+   222→  return (
+   223→    <div className="mx-auto w-full max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 md:space-y-6">
+   224→      {loading ? (
+   225→        <HomeSkeleton />
+   226→      ) : error || !data ? (
+   227→        <ErrorState message={error ?? 'No data available.'} onRetry={load} />
+   228→      ) : (
+   229→        <HomeContent data={data} setView={setView} connectivity={connectivity} />
+   230→      )}
+   231→    </div>
+   232→  )
+   233→}
+   234→
+   235→// ── Content ─────────────────────────────────────────────────────────────
+   236→function HomeContent({
+   237→  data,
+   238→  setView,
+   239→  connectivity,
+   240→}: {
+   241→  data: HomePayload
+   242→  setView: (v: any) => void
+   243→  connectivity: 'ONLINE' | 'WEAK' | 'OFFLINE'
+   244→}) {
+   245→  const overall = computeOverallRisk(data.riskSummary)
+   246→  const checklist = generateChecklist(data.riskSummary, data.weather)
+   247→
+   248→  return (
+   249→    <>
+   250→      {/* 1. Hero strip */}
+   251→      <HeroStrip
+   252→        name={data.locationMeta.name}
+   253→        lat={data.locationMeta.lat}
+   254→        lng={data.locationMeta.lng}
+   255→        lastUpdated={data.locationMeta.lastUpdated}
+   256→        connectivity={connectivity}
+   257→        overallRisk={overall}
+   258→        activeAlertCount={data.activeAlerts.length}
+   259→        setView={setView}
+   260→      />
+   261→
+   262→      {/* 2. Risk summary grid */}
+   263→      <section aria-label="Risk summary">
+   264→        <div className="mb-2 flex items-center justify-between">
+   265→          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+   266→            Risk summary — next 6 hours
+   267→          </h2>
+   268→          <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setView('risk')}>
+   269→            Full forecast <ChevronRight className="h-3 w-3" />
+   270→          </Button>
+   271→        </div>
+   272→        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+   273→          {data.riskSummary.map((r) => (
+   274→            <RiskCard key={r.hazard} item={r} />
+   275→          ))}
+   276→        </div>
+   277→      </section>
+   278→
+   279→      {/* 3. Two-column: checklist + weather */}
+   280→      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+   281→        <ChecklistCard items={checklist} />
+   282→        <WeatherCard weather={data.weather} />
+   283→      </section>
+   284→
+   285→      {/* 4. Nearby safe places */}
+   286→      <SafePlacesCard facilities={data.nearbyFacilities} setView={setView} />
+   287→
+   288→      {/* 5. Latest news */}
+   289→      <NewsCard news={data.news} setView={setView} />
+   290→
+   291→      {/* 6 + 7. Preparedness tip + district snapshot */}
+   292→      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+   293→        <PreparednessTipCard tip={data.preparednessTip} setView={setView} />
+   294→        <DistrictSnapshotCard
+   295→          alertCount={data.activeAlerts.length}
+   296→          riskSummary={data.riskSummary}
+   297→          weather={data.weather}
+   298→          setView={setView}
+   299→        />
+   300→      </section>
+   301→    </>
+   302→  )
+   303→}
+   304→
+   305→// ── Hero strip ──────────────────────────────────────────────────────────
+   306→function HeroStrip({
+   307→  name,
+   308→  lat,
+   309→  lng,
+   310→  lastUpdated,
+   311→  connectivity,
+   312→  overallRisk,
+   313→  activeAlertCount,
+   314→  setView,
+   315→}: {
+   316→  name: string
+   317→  lat: number
+   318→  lng: number
+   319→  lastUpdated: string
+   320→  connectivity: 'ONLINE' | 'WEAK' | 'OFFLINE'
+   321→  overallRisk: RiskLevel
+   322→  activeAlertCount: number
+   323→  setView: (v: any) => void
+   324→}) {
+   325→  const connMeta = {
+   326→    ONLINE: { Icon: Wifi, label: 'Online', cls: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800' },
+   327→    WEAK: { Icon: Wifi, label: 'Weak signal', cls: 'border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800' },
+   328→    OFFLINE: { Icon: WifiOff, label: 'Offline', cls: 'border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800' },
+   329→  }[connectivity]
+   330→
+   331→  return (
+   332→    <Card className="p-4 md:p-6 gap-4">
+   333→      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+   334→        <div className="space-y-1 min-w-0">
+   335→          <div className="flex items-center gap-2 flex-wrap">
+   336→            <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+   337→            <h1 className="text-xl md:text-2xl font-bold tracking-tight truncate">{name}</h1>
+   338→            <Badge variant="outline" className={cn('gap-1 text-[11px] font-medium', connMeta.cls)}>
+   339→              <connMeta.Icon className="h-3 w-3" />
+   340→              {connMeta.label}
+   341→            </Badge>
+   342→          </div>
+   343→          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+   344→            <span className="inline-flex items-center gap-1">
+   345→              <Clock className="h-3 w-3" />
+   346→              Updated {formatRelativeTime(lastUpdated)}
+   347→            </span>
+   348→            <span className="inline-flex items-center gap-1">
+   349→              <MapPin className="h-3 w-3" />
+   350→              {lat.toFixed(3)}, {lng.toFixed(3)}
+   351→            </span>
+   352→            {activeAlertCount > 0 && (
+   353→              <span className="inline-flex items-center gap-1 text-orange-600 dark:text-orange-400 font-medium">
+   354→                <AlertTriangle className="h-3 w-3" />
+   355→                {activeAlertCount} active {activeAlertCount === 1 ? 'alert' : 'alerts'}
+   356→              </span>
+   357→            )}
+   358→          </div>
+   359→        </div>
+   360→
+   361→        <div className="flex flex-col items-start lg:items-end gap-2 shrink-0">
+   362→          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+   363→            Overall risk
+   364→          </div>
+   365→          <div className="flex items-center gap-2 flex-wrap lg:justify-end">
+   366→            <ModelRiskBadge level={overallRisk as ModelRiskLevel} />
+   367→            <SimulationBadge />
+   368→          </div>
+   369→        </div>
+   370→      </div>
+   371→
+   372→      <Separator />
+   373→
+   374→      {/* Primary action buttons row */}
+   375→      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+   376→        <Button
+   377→          variant="default"
+   378→          size="sm"
+   379→          className="gap-1.5 w-full"
+   380→          onClick={() => setView('map')}
+   381→        >
+   382→          <MapPin className="h-3.5 w-3.5" />
+   383→          Check my area
+   384→        </Button>
+   385→        <Button
+   386→          variant="destructive"
+   387→          size="sm"
+   388→          className="gap-1.5 w-full"
+   389→          onClick={() => setView('sos')}
+   390→        >
+   391→          <Siren className="h-3.5 w-3.5" />
+   392→          SOS / Get Help
+   393→        </Button>
+   394→        <Button
+   395→          variant="outline"
+   396→          size="sm"
+   397→          className="gap-1.5 w-full"
+   398→          onClick={() => setView('safe-places')}
+   399→        >
+   400→          <ShieldCheck className="h-3.5 w-3.5" />
+   401→          Find a safe place
+   402→        </Button>
+   403→        <Button
+   404→          variant="outline"
+   405→          size="sm"
+   406→          className="gap-1.5 w-full"
+   407→          onClick={() => setView('reports')}
+   408→        >
+   409→          <Megaphone className="h-3.5 w-3.5" />
+   410→          Report a hazard
+   411→        </Button>
+   412→      </div>
+   413→    </Card>
+   414→  )
+   415→}
+   416→
+   417→// ── Risk card ───────────────────────────────────────────────────────────
+   418→function RiskCard({ item }: { item: RiskSummaryItem }) {
+   419→  const TrendIcon = TREND_ICON[item.trend]
+   420→  const hazard = item.hazard as HazardType
+   421→  return (
+   422→    <Card className="p-4 gap-3">
+   423→      <div className="flex items-start justify-between gap-2">
+   424→        <div className="flex items-center gap-2 min-w-0">
+   425→          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
+   426→            <HazardIcon type={hazard} className="h-4 w-4" />
+   427→          </div>
+   428→          <div className="min-w-0">
+   429→            <div className="text-sm font-semibold leading-tight truncate">
+   430→              {HAZARD_LABELS[item.hazard] ?? item.hazard}
+   431→            </div>
+   432→            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+   433→              {item.modelVersion.replace('purvaguard-', '').replace('-v1', '')}
+   434→            </div>
+   435→          </div>
+   436→        </div>
+   437→        <TrendIcon className={cn('h-4 w-4 shrink-0', TREND_TONE[item.trend])} aria-label={`trend ${item.trend}`} />
+   438→      </div>
+   439→
+   440→      <div className="flex items-center justify-between">
+   441→        <ModelRiskBadge level={item.level as ModelRiskLevel} />
+   442→        {item.simulationMode && <DemoBadge className="text-[9px] px-1.5 py-0" />}
+   443→      </div>
+   444→
+   445→      <div className="space-y-1.5">
+   446→        <div className="flex items-center justify-between text-[11px]">
+   447→          <span className="text-muted-foreground">Risk score</span>
+   448→          <span className="font-semibold tabular-nums">{item.score}/100</span>
+   449→        </div>
+   450→        <Progress value={item.score} className="h-1.5" />
+   451→      </div>
+   452→
+   453→      <div className="grid grid-cols-2 gap-2 text-[11px]">
+   454→        <div className="flex flex-col">
+   455→          <span className="text-muted-foreground">Confidence</span>
+   456→          <span className="font-semibold tabular-nums">{Math.round(item.confidence * 100)}%</span>
+   457→        </div>
+   458→        <div className="flex flex-col">
+   459→          <span className="text-muted-foreground">Data coverage</span>
+   460→          <span className="font-semibold tabular-nums">{item.dataCoveragePct}%</span>
+   461→        </div>
+   462→      </div>
+   463→
+   464→      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+   465→        <Clock className="h-3 w-3" />
+   466→        Source {item.sourceFreshnessMinutes === 0 ? '—' : `${item.sourceFreshnessMinutes}m ago`}
+   467→      </div>
+   468→
+   469→      {item.note && (
+   470→        <p className="text-[10px] text-muted-foreground italic leading-snug">{item.note}</p>
+   471→      )}
+   472→    </Card>
+   473→  )
+   474→}
+   475→
+   476→const HAZARD_LABELS: Record<string, string> = {
+   477→  LANDSLIDE: 'Landslide',
+   478→  FLASH_FLOOD: 'Flash Flood',
+   479→  HEAVY_RAIN: 'Heavy Rain',
+   480→  ROAD_BLOCK: 'Road Block',
+   481→  EARTHQUAKE: 'Earthquake',
+   482→  GENERAL: 'General',
+   483→}
+   484→
+   485→// ── Checklist card ──────────────────────────────────────────────────────
+   486→function ChecklistCard({ items }: { items: { text: string; tone: 'critical' | 'caution' | 'info' }[] }) {
+   487→  const toneCls = {
+   488→    critical: 'border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+   489→    caution: 'border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
+   490→    info: 'border-slate-200 bg-slate-50 text-slate-700 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700',
+   491→  }
+   492→  const toneIcon = {
+   493→    critical: AlertTriangle,
+   494→    caution: AlertTriangle,
+   495→    info: CheckCircle2,
+   496→  }
+   497→  return (
+   498→    <Card className="p-4 md:p-6 gap-3">
+   499→      <div className="flex items-center gap-2">
+   500→        <ListChecks className="h-4 w-4 text-primary" />
+   501→        <h3 className="text-sm font-semibold">What should I do now?</h3>
+   502→      </div>
+   503→      <p className="text-xs text-muted-foreground">
+   504→        Personalized actions based on current risk levels near you.
+   505→      </p>
+   506→      <ul className="space-y-2 max-h-80 overflow-y-auto scrollbar-thin pr-1">
+   507→        {items.map((it, i) => {
+   508→          const Icon = toneIcon[it.tone]
+   509→          return (
+   510→            <li
+   511→              key={i}
+   512→              className={cn(
+   513→                'flex items-start gap-2 rounded-md border px-3 py-2 text-[13px] leading-snug',
+   514→                toneCls[it.tone]
+   515→              )}
+   516→            >
+   517→              <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+   518→              <span>{it.text}</span>
+   519→            </li>
+   520→          )
+   521→        })}
+   522→      </ul>
+   523→    </Card>
+   524→  )
+   525→}
+   526→
+   527→// ── Weather card ────────────────────────────────────────────────────────
+   528→function WeatherCard({ weather }: { weather: WeatherData | null }) {
+   529→  if (!weather) {
+   530→    return (
+   531→      <Card className="p-4 md:p-6 gap-3">
+   532→        <div className="flex items-center gap-2">
+   533→          <Cloud className="h-4 w-4 text-primary" />
+   534→          <h3 className="text-sm font-semibold">Local weather</h3>
+   535→        </div>
+   536→        <p className="text-xs text-muted-foreground">
+   537→          No weather observation within 50 km. Showing fallback summary.
+   538→        </p>
+   539→        <div className="grid grid-cols-2 gap-3 text-sm">
+   540→          <div className="flex items-center gap-2 text-muted-foreground">
+   541→            <Droplets className="h-4 w-4" /> Rainfall (24h): —
+   542→          </div>
+   543→          <div className="flex items-center gap-2 text-muted-foreground">
+   544→            <Thermometer className="h-4 w-4" /> Temperature: —
+   545→          </div>
+   546→        </div>
+   547→      </Card>
+   548→    )
+   549→  }
+   550→  return (
+   551→    <Card className="p-4 md:p-6 gap-3">
+   552→      <div className="flex items-center justify-between gap-2">
+   553→        <div className="flex items-center gap-2">
+   554→          <Cloud className="h-4 w-4 text-primary" />
+   555→          <h3 className="text-sm font-semibold">Local weather</h3>
+   556→        </div>
+   557→        {weather.demoLabel && <DemoBadge />}
+   558→      </div>
+   559→      <div className="text-xs text-muted-foreground">
+   560→        {weather.stationName ? `${weather.stationName} · ` : ''}{weather.distanceKm} km away · updated {formatRelativeTime(weather.observedAt)}
+   561→      </div>
+   562→
+   563→      <div className="rounded-lg bg-muted/60 p-3 flex items-end gap-2">
+   564→        <Droplets className="h-7 w-7 text-cyan-600 dark:text-cyan-400 self-center" />
+   565→        <div>
+   566→          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rainfall 24h</div>
+   567→          <div className="text-2xl font-bold tabular-nums leading-none">
+   568→            {weather.rainfall24hMm.toFixed(0)}
+   569→            <span className="text-sm font-normal text-muted-foreground ml-1">mm</span>
+   570→          </div>
+   571→        </div>
+   572→      </div>
+   573→
+   574→      <div className="grid grid-cols-2 gap-3 text-[13px]">
+   575→        <div className="flex items-center gap-2">
+   576→          <Droplets className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+   577→          <div>
+   578→            <div className="text-[10px] uppercase text-muted-foreground">Last 1h</div>
+   579→            <div className="font-semibold tabular-nums">{weather.rainfall1hMm.toFixed(1)} mm</div>
+   580→          </div>
+   581→        </div>
+   582→        <div className="flex items-center gap-2">
+   583→          <Thermometer className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
+   584→          <div>
+   585→            <div className="text-[10px] uppercase text-muted-foreground">Temperature</div>
+   586→            <div className="font-semibold tabular-nums">{weather.temperatureC.toFixed(1)}°C</div>
+   587→          </div>
+   588→        </div>
+   589→        <div className="flex items-center gap-2">
+   590→          <Cloud className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+   591→          <div>
+   592→            <div className="text-[10px] uppercase text-muted-foreground">Humidity</div>
+   593→            <div className="font-semibold tabular-nums">{Math.round(weather.humidityPct)}%</div>
+   594→          </div>
+   595→        </div>
+   596→        <div className="flex items-center gap-2">
+   597→          <Wind className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+   598→          <div>
+   599→            <div className="text-[10px] uppercase text-muted-foreground">Wind</div>
+   600→            <div className="font-semibold tabular-nums">{Math.round(weather.windKph)} km/h</div>
+   601→          </div>
+   602→        </div>
+   603→      </div>
+   604→    </Card>
+   605→  )
+   606→}
+   607→
+   608→// ── Safe places card ────────────────────────────────────────────────────
+   609→function SafePlacesCard({
+   610→  facilities,
+   611→  setView,
+   612→}: {
+   613→  facilities: FacilityItem[]
+   614→  setView: (v: any) => void
+   615→}) {
+   616→  return (
+   617→    <Card className="p-4 md:p-6 gap-3">
+   618→      <div className="flex items-center justify-between gap-2">
+   619→        <div className="flex items-center gap-2">
+   620→          <ShieldCheck className="h-4 w-4 text-primary" />
+   621→          <h3 className="text-sm font-semibold">Nearby safe places</h3>
+   622→          <Badge variant="secondary" className="text-[10px]">{facilities.length}</Badge>
+   623→        </div>
+   624→        <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setView('safe-places')}>
+   625→          View all on map <ChevronRight className="h-3 w-3" />
+   626→        </Button>
+   627→      </div>
+   628→
+   629→      {facilities.length === 0 ? (
+   630→        <p className="text-xs text-muted-foreground py-4 text-center">
+   631→          No shelters, hospitals, or relief centres within 30 km of this location.
+   632→        </p>
+   633→      ) : (
+   634→        <div className="flex gap-3 overflow-x-auto scrollbar-thin pb-1 -mx-1 px-1">
+   635→          {facilities.map((f) => (
+   636→            <div
+   637→              key={f.id}
+   638→              className="min-w-[220px] max-w-[260px] rounded-lg border bg-card p-3 flex flex-col gap-2 shrink-0"
+   639→            >
+   640→              <div className="flex items-start justify-between gap-2">
+   641→                <div className="flex items-center gap-2 min-w-0">
+   642→                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted shrink-0">
+   643→                    <Building2 className="h-3.5 w-3.5" />
+   644→                  </div>
+   645→                  <span className="text-sm font-semibold leading-tight truncate" title={f.name}>
+   646→                    {f.name}
+   647→                  </span>
+   648→                </div>
+   649→              </div>
+   650→              <div className="flex items-center gap-1.5 flex-wrap">
+   651→                <Badge variant="outline" className="text-[10px]">
+   652→                  {f.facilityType.replace(/_/g, ' ').toLowerCase()}
+   653→                </Badge>
+   654→                <StatusBadge status={f.status} className="text-[10px]" />
+   655→              </div>
+   656→              <div className="flex items-center justify-between text-[11px]">
+   657→                <span className="text-muted-foreground inline-flex items-center gap-1">
+   658→                  <MapPin className="h-3 w-3" /> {f.distanceKm} km
+   659→                </span>
+   660→                {f.capacity != null && (
+   661→                  <span className="font-medium tabular-nums">
+   662→                    {f.availableUnits ?? 0}/{f.capacity} free
+   663→                  </span>
+   664→                )}
+   665→              </div>
+   666→            </div>
+   667→          ))}
+   668→        </div>
+   669→      )}
+   670→    </Card>
+   671→  )
+   672→}
+   673→
+   674→// ── News card ───────────────────────────────────────────────────────────
+   675→function NewsCard({ news, setView }: { news: NewsItemData[]; setView: (v: any) => void }) {
+   676→  return (
+   677→    <Card className="p-4 md:p-6 gap-3">
+   678→      <div className="flex items-center justify-between gap-2">
+   679→        <div className="flex items-center gap-2">
+   680→          <Newspaper className="h-4 w-4 text-primary" />
+   681→          <h3 className="text-sm font-semibold">Latest news &amp; updates</h3>
+   682→        </div>
+   683→        <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setView('news')}>
+   684→          View all <ChevronRight className="h-3 w-3" />
+   685→        </Button>
+   686→      </div>
+   687→
+   688→      {news.length === 0 ? (
+   689→        <p className="text-xs text-muted-foreground py-4 text-center">
+   690→          No published news for this region yet.
+   691→        </p>
+   692→      ) : (
+   693→        <ul className="divide-y divide-border max-h-96 overflow-y-auto scrollbar-thin -mx-1">
+   694→          {news.map((n) => (
+   695→            <li key={n.id} className="py-3 px-1">
+   696→              <div className="flex items-start gap-3">
+   697→                <div className="min-w-0 flex-1">
+   698→                  <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+   699→                    {n.pinned && (
+   700→                      <Badge variant="outline" className="text-[9px] uppercase border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700">
+   701→                        Pinned
+   702→                      </Badge>
+   703→                    )}
+   704→                    {n.demoLabel && <DemoBadge className="text-[9px] px-1.5 py-0" />}
+   705→                    <span className="text-[10px] text-muted-foreground">{formatRelativeTime(n.publishedAt)}</span>
+   706→                  </div>
+   707→                  <a
+   708→                    href={n.sourceUrl}
+   709→                    target="_blank"
+   710→                    rel="noopener noreferrer"
+   711→                    className="text-sm font-semibold leading-snug hover:underline inline-flex items-start gap-1"
+   712→                  >
+   713→                    <span className="flex-1">{n.title}</span>
+   714→                    <ExternalLink className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+   715→                  </a>
+   716→                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 leading-snug">
+   717→                    {n.summary}
+   718→                  </p>
+   719→                  <div className="text-[10px] text-muted-foreground mt-1">
+   720→                    {n.publisher}
+   721→                  </div>
+   722→                </div>
+   723→              </div>
+   724→            </li>
+   725→          ))}
+   726→        </ul>
+   727→      )}
+   728→    </Card>
+   729→  )
+   730→}
+   731→
+   732→// ── Preparedness tip card ────────────────────────────────────────────────
+   733→function PreparednessTipCard({
+   734→  tip,
+   735→  setView,
+   736→}: {
+   737→  tip: PreparednessTipData | null
+   738→  setView: (v: any) => void
+   739→}) {
+   740→  return (
+   741→    <Card className="p-4 md:p-6 gap-3 md:col-span-2">
+   742→      <div className="flex items-center gap-2">
+   743→        <Megaphone className="h-4 w-4 text-primary" />
+   744→        <h3 className="text-sm font-semibold">Preparedness tip of the day</h3>
+   745→      </div>
+   746→      {!tip ? (
+   747→        <p className="text-xs text-muted-foreground py-2">No preparedness guide available.</p>
+   748→      ) : (
+   749→        <div className="space-y-2">
+   750→          <div className="flex items-center gap-2 flex-wrap">
+   751→            {tip.hazardType && <HazardBadge type={tip.hazardType} className="text-[10px]" />}
+   752→            <h4 className="text-base font-semibold">{tip.title}</h4>
+   753→          </div>
+   754→          <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
+   755→            {tip.excerpt}
+   756→            {tip.excerpt.length >= 160 ? '…' : ''}
+   757→          </p>
+   758→          <Button variant="outline" size="sm" className="gap-1.5 w-fit" onClick={() => setView('preparedness')}>
+   759→            Read guide <ChevronRight className="h-3.5 w-3.5" />
+   760→          </Button>
+   761→        </div>
+   762→      )}
+   763→    </Card>
+   764→  )
+   765→}
+   766→
+   767→// ── District snapshot card ──────────────────────────────────────────────
+   768→function DistrictSnapshotCard({
+   769→  alertCount,
+   770→  riskSummary,
+   771→  weather,
+   772→  setView,
+   773→}: {
+   774→  alertCount: number
+   775→  riskSummary: RiskSummaryItem[]
+   776→  weather: WeatherData | null
+   777→  setView: (v: any) => void
+   778→}) {
+   779→  const highRisks = riskSummary.filter((r) => r.level === 'HIGH' || r.level === 'VERY_HIGH').length
+   780→  const staleSources = riskSummary.filter((r) => r.sourceFreshnessMinutes > 30).length
+   781→  return (
+   782→    <Card className="p-4 md:p-6 gap-3">
+   783→      <div className="flex items-center gap-2">
+   784→        <Activity className="h-4 w-4 text-primary" />
+   785→        <h3 className="text-sm font-semibold">District status</h3>
+   786→      </div>
+   787→      <div className="grid grid-cols-2 gap-3">
+   788→        <div className="rounded-md border bg-muted/30 p-3">
+   789→          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Active alerts</div>
+   790→          <div className="text-2xl font-bold tabular-nums">{alertCount}</div>
+   791→        </div>
+   792→        <div className="rounded-md border bg-muted/30 p-3">
+   793→          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">High-risk hazards</div>
+   794→          <div className="text-2xl font-bold tabular-nums">{highRisks}</div>
+   795→        </div>
+   796→        <div className="rounded-md border bg-muted/30 p-3">
+   797→          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rainfall 24h</div>
+   798→          <div className="text-2xl font-bold tabular-nums">
+   799→            {weather ? weather.rainfall24hMm.toFixed(0) : '—'}
+   800→            <span className="text-xs font-normal text-muted-foreground ml-1">mm</span>
+   801→          </div>
+   802→        </div>
+   803→        <div className="rounded-md border bg-muted/30 p-3">
+   804→          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Stale sources</div>
+   805→          <div className="text-2xl font-bold tabular-nums">{staleSources}</div>
+   806→        </div>
+   807→      </div>
+   808→      <p className="text-[11px] text-muted-foreground leading-snug">
+   809→        All hazard predictions and weather data are <strong>simulation-mode</strong> for the demo build. In production, these would be sourced from IMD, GSI, CWC and verified district feeds.
+   810→      </p>
+   811→      <Button variant="ghost" size="sm" className="gap-1 text-xs w-fit" onClick={() => setView('operations')}>
+   812→        Operations dashboard <ChevronRight className="h-3 w-3" />
+   813→      </Button>
+   814→    </Card>
+   815→  )
+   816→}
+   817→
+   818→// ── Loading skeleton ────────────────────────────────────────────────────
+   819→function HomeSkeleton() {
+   820→  return (
+   821→    <div className="space-y-4 md:space-y-6">
+   822→      <Card className="p-4 md:p-6 gap-4">
+   823→        <div className="flex items-center justify-between gap-4">
+   824→          <div className="space-y-2">
+   825→            <Skeleton className="h-6 w-48" />
+   826→            <Skeleton className="h-3 w-64" />
+   827→          </div>
+   828→          <Skeleton className="h-6 w-28 rounded-full" />
+   829→        </div>
+   830→        <Skeleton className="h-px w-full" />
+   831→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+   832→          {Array.from({ length: 4 }).map((_, i) => (
+   833→            <Skeleton key={i} className="h-8 w-full rounded-md" />
+   834→          ))}
+   835→        </div>
+   836→      </Card>
+   837→
+   838→      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+   839→        {Array.from({ length: 5 }).map((_, i) => (
+   840→          <Card key={i} className="p-4 gap-3">
+   841→            <Skeleton className="h-8 w-8 rounded-md" />
+   842→            <Skeleton className="h-5 w-20 rounded-full" />
+   843→            <Skeleton className="h-1.5 w-full rounded-full" />
+   844→            <Skeleton className="h-3 w-full" />
+   845→            <Skeleton className="h-3 w-2/3" />
+   846→          </Card>
+   847→        ))}
+   848→      </div>
+   849→
+   850→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+   851→        <Card className="p-4 md:p-6 gap-3">
+   852→          <Skeleton className="h-5 w-48" />
+   853→          <Skeleton className="h-3 w-64" />
+   854→          {Array.from({ length: 4 }).map((_, i) => (
+   855→            <Skeleton key={i} className="h-9 w-full rounded-md" />
+   856→          ))}
+   857→        </Card>
+   858→        <Card className="p-4 md:p-6 gap-3">
+   859→          <Skeleton className="h-5 w-40" />
+   860→          <Skeleton className="h-3 w-48" />
+   861→          <Skeleton className="h-16 w-full rounded-lg" />
+   862→          <div className="grid grid-cols-2 gap-3">
+   863→            {Array.from({ length: 4 }).map((_, i) => (
+   864→              <Skeleton key={i} className="h-10 w-full rounded-md" />
+   865→            ))}
+   866→          </div>
+   867→        </Card>
+   868→      </div>
+   869→
+   870→      <Card className="p-4 md:p-6 gap-3">
+   871→        <Skeleton className="h-5 w-40" />
+   872→        <div className="flex gap-3 overflow-hidden">
+   873→          {Array.from({ length: 3 }).map((_, i) => (
+   874→            <Skeleton key={i} className="h-24 w-60 rounded-lg shrink-0" />
+   875→          ))}
+   876→        </div>
+   877→      </Card>
+   878→
+   879→      <Card className="p-4 md:p-6 gap-3">
+   880→        <Skeleton className="h-5 w-44" />
+   881→        {Array.from({ length: 4 }).map((_, i) => (
+   882→          <Skeleton key={i} className="h-12 w-full rounded-md" />
+   883→        ))}
+   884→      </Card>
+   885→    </div>
+   886→  )
+   887→}
+   888→
+   889→// ── Error state ─────────────────────────────────────────────────────────
+   890→function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+   891→  return (
+   892→    <Card className="p-6 gap-3 border-destructive/40">
+   893→      <div className="flex items-center gap-2 text-destructive">
+   894→        <AlertTriangle className="h-5 w-5" />
+   895→        <h3 className="font-semibold">Could not load home data</h3>
+   896→      </div>
+   897→      <p className="text-sm text-muted-foreground">{message}</p>
+   898→      <Button variant="outline" size="sm" className="gap-1.5 w-fit" onClick={onRetry}>
+   899→        <RefreshCw className="h-3.5 w-3.5" /> Try again
+   900→      </Button>
+   901→    </Card>
+   902→  )
+   903→}
+   904→

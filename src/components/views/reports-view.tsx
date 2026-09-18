@@ -118,7 +118,7 @@ function captureGeolocation(): Promise<{ lat: number; lng: number }> {
 
 // ── Main view ────────────────────────────────────────────────────────────
 export default function ReportsView() {
-  const { location, connectivity } = useApp()
+  const { location, connectivity, language } = useApp()
 
   // Form state
   const [category, setCategory] = React.useState('LANDSLIDE')
@@ -232,6 +232,43 @@ export default function ReportsView() {
       setReports((cur) => [res.report, ...cur])
       toast.success('Report received — status: RECEIVED')
       setDescription('')
+
+      // Trigger AI disaster verification pipeline automatically.
+      // The AI analyzes the report, verifies it, and if it's a HIGH/CRITICAL
+      // disaster, auto-creates an alert + sends SMS to all recipients.
+      try {
+        toast.info('AI is analyzing your report…', {
+          description: 'Verifying disaster signal and notifying authorities if needed.',
+        })
+        const verifyRes = await apiPost<{ analysis: any; alertCreated: any; smsResult: any; autoActionTaken: boolean }>('/api/disaster-verify', {
+          text: `${category}: ${description.trim()}`,
+          language,
+          reportId: res.report.id,
+          lat: latN,
+          lng: lngN,
+        })
+        if (verifyRes.autoActionTaken) {
+          const a = verifyRes.analysis
+          const sms = verifyRes.smsResult
+          toast.success('⚠️ Disaster verified by AI!', {
+            description: `${a.disasterType} (${a.severity}) detected near ${a.affectedArea}. Alert created & SMS sent to ${sms?.sent ?? 0}/${sms?.total ?? 6} recipients.`,
+            duration: 8000,
+          })
+        } else if (verifyRes.analysis?.isRealDisaster) {
+          toast.info('AI flagged this report for review', {
+            description: `Severity: ${verifyRes.analysis.severity}. An operator will verify shortly.`,
+            duration: 6000,
+          })
+        } else {
+          toast.info('AI analysis complete', {
+            description: 'No immediate disaster signal detected. Report logged for monitoring.',
+            duration: 5000,
+          })
+        }
+      } catch (verifyErr) {
+        // Verification pipeline failure should not block the report.
+        console.error('Verification failed:', verifyErr)
+      }
     } catch (err: any) {
       // Fallback to queue on error.
       const next = [...queue, { queuedAt: new Date().toISOString(), payload }]

@@ -502,3 +502,51 @@ model Feedback {
   createdAt  DateTime @default(now())
   resolvedAt DateTime?
 }
+
+// ── SMS & disaster verification pipeline ─────────────────────────────
+model SmsRecipient {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  name      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model SmsLog {
+  id              String   @id @default(cuid())
+  phone           String
+  message         String
+  status          String   @default("QUEUED") // QUEUED | SENT | DELIVERED | FAILED | QUOTA_EXCEEDED
+  provider        String   @default("textbelt")
+  providerResponse String?
+  alertId         String?
+  incidentId      String?
+  verificationId  String?
+  simulationMode  Boolean  @default(false)
+  sentAt          DateTime @default(now())
+  deliveredAt     DateTime?
+}
+
+model DisasterVerification {
+  id            String   @id @default(cuid())
+  reportId      String?
+  incidentId    String?
+  inputText     String
+  analysis      String   // Json as text: { severity, confidence, isReal, affectedArea, recommendedAction, extractedLocation }
+  verified      Boolean  @default(false)
+  actionTaken   String?  // e.g. "SMS_SENT", "ALERT_CREATED", "QUEUED_FOR_REVIEW"
+  alertId       String?
+  createdAt     DateTime @default(now())
+}
+
+// ── i18n translations (admin-editable) ──────────────────────────────
+model Translation {
+  id        String   @id @default(cuid())
+  key       String
+  language  String
+  value     String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([key, language])
+}

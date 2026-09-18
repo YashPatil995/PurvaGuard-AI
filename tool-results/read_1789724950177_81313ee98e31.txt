@@ -1,0 +1,1318 @@
+     1→'use client'
+     2→
+     3→import * as React from 'react'
+     4→import {
+     5→  Settings, Lock, Newspaper, Building2, MapPin, Users, ShieldCheck, Save,
+     6→  Plus, Pencil, Archive, X, RefreshCw, CheckCircle2, Trash2, Power, Pin,
+     7→  PinOff, Database, AlertTriangle,
+     8→} from 'lucide-react'
+     9→import { useApp } from '@/lib/store'
+    10→import { apiGet, apiPost, apiPatch } from '@/lib/api-client'
+    11→import { formatRelativeTime } from '@/lib/constants'
+    12→import { toast } from 'sonner'
+    13→import {
+    14→  Card, CardContent, CardDescription, CardHeader, CardTitle,
+    15→} from '@/components/ui/card'
+    16→import { Button } from '@/components/ui/button'
+    17→import { Badge } from '@/components/ui/badge'
+    18→import { Input } from '@/components/ui/input'
+    19→import { Textarea } from '@/components/ui/textarea'
+    20→import { Label } from '@/components/ui/label'
+    21→import { Separator } from '@/components/ui/separator'
+    22→import { Skeleton } from '@/components/ui/skeleton'
+    23→import {
+    24→  Tabs, TabsList, TabsTrigger, TabsContent,
+    25→} from '@/components/ui/tabs'
+    26→import {
+    27→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    28→} from '@/components/ui/table'
+    29→import {
+    30→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    31→} from '@/components/ui/select'
+    32→import {
+    33→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    34→  DialogFooter,
+    35→} from '@/components/ui/dialog'
+    36→import {
+    37→  AlertDialog,
+    38→  AlertDialogAction,
+    39→  AlertDialogCancel,
+    40→  AlertDialogContent,
+    41→  AlertDialogDescription,
+    42→  AlertDialogFooter,
+    43→  AlertDialogHeader,
+    44→  AlertDialogTitle,
+    45→  AlertDialogTrigger,
+    46→} from '@/components/ui/alert-dialog'
+    47→import {
+    48→  Tooltip, TooltipContent, TooltipTrigger,
+    49→} from '@/components/ui/tooltip'
+    50→import { StatusBadge, SimulationBadge } from '@/components/shared/badges'
+    51→import { cn } from '@/lib/utils'
+    52→
+    53→// ─── Locked card ─────────────────────────────────────────────────────
+    54→function LockedCard() {
+    55→  const { role, setRole } = useApp()
+    56→  return (
+    57→    <div className="mx-auto max-w-2xl px-4 py-12">
+    58→      <Card>
+    59→        <CardHeader>
+    60→          <div className="flex items-center gap-2">
+    61→            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+    62→              <Lock className="h-4 w-4" />
+    63→            </div>
+    64→            <div>
+    65→              <CardTitle>Admin Console</CardTitle>
+    66→              <CardDescription>Restricted to platform administrators</CardDescription>
+    67→            </div>
+    68→          </div>
+    69→        </CardHeader>
+    70→        <CardContent className="space-y-4 text-sm">
+    71→          <p className="text-muted-foreground">
+    72→            Admin Console is restricted to platform administrators. Switch your demo role
+    73→            (top-right) to <strong>Platform Admin</strong> to access this view.
+    74→          </p>
+    75→          <p className="text-xs text-muted-foreground">
+    76→            Current role: <Badge variant="outline" className="font-mono">{role}</Badge>
+    77→          </p>
+    78→          <Button size="sm" onClick={() => setRole('ADMIN')}>Switch to Admin</Button>
+    79→        </CardContent>
+    80→      </Card>
+    81→    </div>
+    82→  )
+    83→}
+    84→
+    85→// ─── Overview tab ────────────────────────────────────────────────────
+    86→function OverviewTab() {
+    87→  const [counts, setCounts] = React.useState<{
+    88→    alerts: number; incidents: number; news: number; facilities: number; regions: number; volunteers: number
+    89→  } | null>(null)
+    90→  const [loading, setLoading] = React.useState(true)
+    91→
+    92→  React.useEffect(() => {
+    93→    let cancelled = false
+    94→    ;(async () => {
+    95→      setLoading(true)
+    96→      try {
+    97→        const [alerts, incidents, news, facilities, regions, volunteers] = await Promise.all([
+    98→          apiGet<{ items: any[]; total: number }>(`/api/ops/alerts`).catch(() => ({ items: [], total: 0 })),
+    99→          apiGet<{ items: any[]; total: number }>(`/api/ops/incidents?limit=500`).catch(() => ({ items: [], total: 0 })),
+   100→          apiGet<{ items: any[]; total: number }>(`/api/admin/news`).catch(() => ({ items: [], total: 0 })),
+   101→          apiGet<{ items: any[]; total: number }>(`/api/admin/facilities`).catch(() => ({ items: [], total: 0 })),
+   102→          apiGet<{ items: any[]; total: number }>(`/api/admin/regions`).catch(() => ({ items: [], total: 0 })),
+   103→          apiGet<{ items: any[]; total: number }>(`/api/admin/volunteers`).catch(() => ({ items: [], total: 0 })),
+   104→        ])
+   105→        if (cancelled) return
+   106→        setCounts({
+   107→          alerts: alerts.total,
+   108→          incidents: incidents.total,
+   109→          news: news.total,
+   110→          facilities: facilities.total,
+   111→          regions: regions.total,
+   112→          volunteers: volunteers.total,
+   113→        })
+   114→      } finally {
+   115→        if (!cancelled) setLoading(false)
+   116→      }
+   117→    })()
+   118→    return () => { cancelled = true }
+   119→  }, [])
+   120→
+   121→  const cards = counts
+   122→    ? [
+   123→        { label: 'Alerts (all statuses)', value: counts.alerts, icon: Newspaper, tone: 'text-red-600 dark:text-red-300' },
+   124→        { label: 'Incidents', value: counts.incidents, icon: AlertTriangle, tone: 'text-orange-600 dark:text-orange-300' },
+   125→        { label: 'News items', value: counts.news, icon: Newspaper, tone: 'text-blue-600 dark:text-blue-300' },
+   126→        { label: 'Facilities', value: counts.facilities, icon: Building2, tone: 'text-emerald-600 dark:text-emerald-300' },
+   127→        { label: 'Regions / localities', value: counts.regions, icon: MapPin, tone: 'text-violet-600 dark:text-violet-300' },
+   128→        { label: 'Volunteers', value: counts.volunteers, icon: Users, tone: 'text-teal-600 dark:text-teal-300' },
+   129→      ]
+   130→    : []
+   131→
+   132→  return (
+   133→    <div className="space-y-4">
+   134→      <div className="flex items-center gap-2 flex-wrap">
+   135→        <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700">
+   136→          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+   137→          demo mode: ON
+   138→        </Badge>
+   139→        <Badge variant="outline" className="gap-1">
+   140→          <ShieldCheck className="h-3 w-3" /> Audit logging active
+   141→        </Badge>
+   142→        <span className="text-xs text-muted-foreground">
+   143→          Simulation labels are shown on every simulated object so demo audiences can distinguish synthetic from live data.
+   144→        </span>
+   145→      </div>
+   146→      {loading ? (
+   147→        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+   148→          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+   149→        </div>
+   150→      ) : (
+   151→        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+   152→          {cards.map((c) => (
+   153→            <Card key={c.label} className="py-4">
+   154→              <CardContent className="flex items-center gap-3 px-4">
+   155→                <div className={cn('flex h-10 w-10 items-center justify-center rounded-lg bg-muted', c.tone)}>
+   156→                  <c.icon className="h-5 w-5" />
+   157→                </div>
+   158→                <div className="flex flex-col leading-none">
+   159→                  <span className={cn('text-2xl font-bold tabular-nums', c.tone)}>{c.value}</span>
+   160→                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground mt-1">{c.label}</span>
+   161→                </div>
+   162→              </CardContent>
+   163→            </Card>
+   164→          ))}
+   165→        </div>
+   166→      )}
+   167→      <Card className="py-4">
+   168→        <CardHeader className="pb-2">
+   169→          <CardTitle className="text-sm flex items-center gap-2">
+   170→            <Database className="h-4 w-4" /> Data-source health
+   171→          </CardTitle>
+   172→          <CardDescription className="text-xs">Health summary pulled from the operations console.</CardDescription>
+   173→        </CardHeader>
+   174→        <CardContent>
+   175→          <DataHealthInline />
+   176→        </CardContent>
+   177→      </Card>
+   178→    </div>
+   179→  )
+   180→}
+   181→
+   182→function DataHealthInline() {
+   183→  const [data, setData] = React.useState<any>(null)
+   184→  React.useEffect(() => {
+   185→    apiGet<any>(`/api/ops/data-health`)
+   186→      .then(setData)
+   187→      .catch(() => {})
+   188→  }, [])
+   189→  if (!data) return <Skeleton className="h-12 w-full" />
+   190→  const s = data.freshnessSummary
+   191→  return (
+   192→    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+   193→      <Pill label="Total sources" value={s.total} />
+   194→      <Pill label="Healthy" value={s.healthy} tone="good" />
+   195→      <Pill label="Degraded" value={s.degraded} tone="warn" />
+   196→      <Pill label="Errored" value={s.errored} tone="bad" />
+   197→      <Pill label="Simulated" value={s.simulated} tone="default" />
+   198→    </div>
+   199→  )
+   200→}
+   201→
+   202→function Pill({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'good' | 'warn' | 'bad' }) {
+   203→  const toneCls = {
+   204→    default: 'border-border bg-muted/40',
+   205→    good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
+   206→    warn: 'border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
+   207→    bad: 'border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+   208→  }[tone]
+   209→  return (
+   210→    <div className={cn('rounded-md border px-2.5 py-1.5', toneCls)}>
+   211→      <div className="text-lg font-bold tabular-nums">{value}</div>
+   212→      <div className="text-[10px] uppercase tracking-wide">{label}</div>
+   213→    </div>
+   214→  )
+   215→}
+   216→
+   217→// ─── News tab ────────────────────────────────────────────────────────
+   218→function NewsTab({ refreshKey, onRefresh }: { refreshKey: number; onRefresh: () => void }) {
+   219→  const [items, setItems] = React.useState<any[]>([])
+   220→  const [loading, setLoading] = React.useState(true)
+   221→  const [createOpen, setCreateOpen] = React.useState(false)
+   222→  const [editItem, setEditItem] = React.useState<any | null>(null)
+   223→
+   224→  const load = React.useCallback(async () => {
+   225→    setLoading(true)
+   226→    try {
+   227→      const res = await apiGet<{ items: any[] }>(`/api/admin/news`)
+   228→      setItems(res.items ?? [])
+   229→    } catch (e) {
+   230→      toast.error('Failed to load news', { description: String(e) })
+   231→    } finally {
+   232→      setLoading(false)
+   233→    }
+   234→  }, [])
+   235→
+   236→  React.useEffect(() => { load() }, [load, refreshKey])
+   237→
+   238→  async function togglePin(item: any) {
+   239→    try {
+   240→      await apiPatch(`/api/admin/news/${item.id}`, { pinned: !item.pinned })
+   241→      toast.success(item.pinned ? 'News unpinned' : 'News pinned', { description: 'Action logged.' })
+   242→      await load()
+   243→      onRefresh()
+   244→    } catch (e) {
+   245→      toast.error('Failed to toggle pin', { description: String(e) })
+   246→    }
+   247→  }
+   248→
+   249→  async function archive(id: string) {
+   250→    try {
+   251→      const res = await fetch(`/api/admin/news/${id}`, { method: 'DELETE' })
+   252→      if (!res.ok) throw new Error(`API ${res.status}`)
+   253→      toast.success('News archived', { description: 'Status set to ARCHIVED. Action logged.' })
+   254→      await load()
+   255→      onRefresh()
+   256→    } catch (e) {
+   257→      toast.error('Archive failed', { description: String(e) })
+   258→    }
+   259→  }
+   260→
+   261→  return (
+   262→    <Card className="py-4">
+   263→      <CardHeader className="pb-2">
+   264→        <div className="flex items-center justify-between flex-wrap gap-2">
+   265→          <div>
+   266→            <CardTitle className="text-sm flex items-center gap-2">
+   267→              <Newspaper className="h-4 w-4" /> News & updates
+   268→            </CardTitle>
+   269→            <CardDescription className="text-xs">Create, edit, pin, or archive news items.</CardDescription>
+   270→          </div>
+   271→          <Button size="sm" onClick={() => setCreateOpen(true)}>
+   272→            <Plus className="h-3.5 w-3.5" /> New item
+   273→          </Button>
+   274→        </div>
+   275→      </CardHeader>
+   276→      <CardContent>
+   277→        <div className="rounded-md border max-h-[60vh] overflow-y-auto scrollbar-thin">
+   278→          <Table>
+   279→            <TableHeader className="sticky top-0 bg-background z-10">
+   280→              <TableRow>
+   281→                <TableHead className="text-xs">Title</TableHead>
+   282→                <TableHead className="text-xs">Publisher</TableHead>
+   283→                <TableHead className="text-xs">Categories</TableHead>
+   284→                <TableHead className="text-xs">Status</TableHead>
+   285→                <TableHead className="text-xs">Pinned</TableHead>
+   286→                <TableHead className="text-xs">Published</TableHead>
+   287→                <TableHead className="text-xs"></TableHead>
+   288→              </TableRow>
+   289→            </TableHeader>
+   290→            <TableBody>
+   291→              {loading && (
+   292→                <TableRow><TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">Loading…</TableCell></TableRow>
+   293→              )}
+   294→              {!loading && items.length === 0 && (
+   295→                <TableRow><TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">No news items yet.</TableCell></TableRow>
+   296→              )}
+   297→              {!loading && items.map((n) => (
+   298→                <TableRow key={n.id}>
+   299→                  <TableCell className="max-w-[280px]">
+   300→                    <div className="text-xs font-medium truncate">{n.title}</div>
+   301→                    <div className="text-[10px] text-muted-foreground truncate">{n.summary}</div>
+   302→                    {n.demoLabel && <Badge variant="outline" className="mt-0.5 text-[9px] border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">DEMO</Badge>}
+   303→                  </TableCell>
+   304→                  <TableCell className="text-xs">{n.publisher}</TableCell>
+   305→                  <TableCell className="text-xs"><Badge variant="outline" className="text-[10px]">{n.categories}</Badge></TableCell>
+   306→                  <TableCell><StatusBadge status={n.status} /></TableCell>
+   307→                  <TableCell>
+   308→                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => togglePin(n)} aria-label="Toggle pin">
+   309→                      {n.pinned ? <Pin className="h-3.5 w-3.5 text-amber-500" /> : <PinOff className="h-3.5 w-3.5 text-muted-foreground" />}
+   310→                    </Button>
+   311→                  </TableCell>
+   312→                  <TableCell className="text-xs">{n.publishedAt ? formatRelativeTime(n.publishedAt) : '—'}</TableCell>
+   313→                  <TableCell>
+   314→                    <div className="flex items-center gap-1">
+   315→                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditItem(n)} aria-label="Edit">
+   316→                        <Pencil className="h-3.5 w-3.5" />
+   317→                      </Button>
+   318→                      <AlertDialog>
+   319→                        <AlertDialogTrigger asChild>
+   320→                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600" aria-label="Archive">
+   321→                            <Archive className="h-3.5 w-3.5" />
+   322→                          </Button>
+   323→                        </AlertDialogTrigger>
+   324→                        <AlertDialogContent>
+   325→                          <AlertDialogHeader>
+   326→                            <AlertDialogTitle>Archive “{n.title}”?</AlertDialogTitle>
+   327→                            <AlertDialogDescription>
+   328→                              This will soft-delete the news item (status: ARCHIVED). The row will be retained for audit. Bulk actions are not required for this MVP.
+   329→                            </AlertDialogDescription>
+   330→                          </AlertDialogHeader>
+   331→                          <AlertDialogFooter>
+   332→                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+   333→                            <AlertDialogAction onClick={() => archive(n.id)}>Archive</AlertDialogAction>
+   334→                          </AlertDialogFooter>
+   335→                        </AlertDialogContent>
+   336→                      </AlertDialog>
+   337→                    </div>
+   338→                  </TableCell>
+   339→                </TableRow>
+   340→              ))}
+   341→            </TableBody>
+   342→          </Table>
+   343→        </div>
+   344→        <p className="text-[11px] text-muted-foreground mt-2">
+   345→          Action logged. All mutations create an AuditLog entry authored by the seeded admin user.
+   346→        </p>
+   347→      </CardContent>
+   348→
+   349→      <NewsFormDialog
+   350→        open={createOpen}
+   351→        onOpenChange={setCreateOpen}
+   352→        onSaved={async () => { await load(); onRefresh() }}
+   353→      />
+   354→      <NewsFormDialog
+   355→        open={!!editItem}
+   356→        onOpenChange={(v) => !v && setEditItem(null)}
+   357→        existing={editItem}
+   358→        onSaved={async () => { setEditItem(null); await load(); onRefresh() }}
+   359→      />
+   360→    </Card>
+   361→  )
+   362→}
+   363→
+   364→function NewsFormDialog({
+   365→  open, onOpenChange, existing, onSaved,
+   366→}: {
+   367→  open: boolean
+   368→  onOpenChange: (v: boolean) => void
+   369→  existing?: any | null
+   370→  onSaved: () => void
+   371→}) {
+   372→  const [form, setForm] = React.useState({
+   373→    title: '', summary: '', publisher: '', sourceUrl: '', categories: 'GENERAL', pinned: false, status: 'PUBLISHED',
+   374→  })
+   375→  const [saving, setSaving] = React.useState(false)
+   376→
+   377→  React.useEffect(() => {
+   378→    if (existing) {
+   379→      setForm({
+   380→        title: existing.title ?? '',
+   381→        summary: existing.summary ?? '',
+   382→        publisher: existing.publisher ?? '',
+   383→        sourceUrl: existing.sourceUrl ?? '',
+   384→        categories: existing.categories ?? 'GENERAL',
+   385→        pinned: existing.pinned ?? false,
+   386→        status: existing.status ?? 'PUBLISHED',
+   387→      })
+   388→    } else if (open) {
+   389→      setForm({
+   390→        title: '', summary: '', publisher: '', sourceUrl: '', categories: 'GENERAL', pinned: false, status: 'PUBLISHED',
+   391→      })
+   392→    }
+   393→  }, [existing, open])
+   394→
+   395→  async function save() {
+   396→    if (!form.title || !form.summary || !form.publisher || !form.sourceUrl) {
+   397→      toast.error('Title, summary, publisher and source URL are required')
+   398→      return
+   399→    }
+   400→    setSaving(true)
+   401→    try {
+   402→      if (existing) {
+   403→        await apiPatch(`/api/admin/news/${existing.id}`, form)
+   404→        toast.success('News updated', { description: 'Action logged.' })
+   405→      } else {
+   406→        await apiPost(`/api/admin/news`, form)
+   407→        toast.success('News created', { description: 'Action logged.' })
+   408→      }
+   409→      onSaved()
+   410→      onOpenChange(false)
+   411→    } catch (e) {
+   412→      toast.error('Failed to save news', { description: String(e) })
+   413→    } finally {
+   414→      setSaving(false)
+   415→    }
+   416→  }
+   417→
+   418→  return (
+   419→    <Dialog open={open} onOpenChange={onOpenChange}>
+   420→      <DialogContent className="sm:max-w-lg">
+   421→        <DialogHeader>
+   422→          <DialogTitle>{existing ? 'Edit news item' : 'Create news item'}</DialogTitle>
+   423→          <DialogDescription>
+   424→            News items are visible in the public News view. Mark as DRAFT to hide, PUBLISHED to show, ARCHIVED to soft-delete.
+   425→          </DialogDescription>
+   426→        </DialogHeader>
+   427→        <div className="space-y-3">
+   428→          <div>
+   429→            <Label className="text-xs">Title</Label>
+   430→            <Input className="h-9 text-sm" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+   431→          </div>
+   432→          <div>
+   433→            <Label className="text-xs">Summary</Label>
+   434→            <Textarea className="text-sm min-h-16" value={form.summary} onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))} />
+   435→          </div>
+   436→          <div className="grid grid-cols-2 gap-2">
+   437→            <div>
+   438→              <Label className="text-xs">Publisher</Label>
+   439→              <Input className="h-9 text-sm" value={form.publisher} onChange={(e) => setForm((f) => ({ ...f, publisher: e.target.value }))} />
+   440→            </div>
+   441→            <div>
+   442→              <Label className="text-xs">Categories</Label>
+   443→              <Input className="h-9 text-sm" value={form.categories} onChange={(e) => setForm((f) => ({ ...f, categories: e.target.value }))} />
+   444→            </div>
+   445→          </div>
+   446→          <div>
+   447→            <Label className="text-xs">Source URL</Label>
+   448→            <Input className="h-9 text-sm" value={form.sourceUrl} onChange={(e) => setForm((f) => ({ ...f, sourceUrl: e.target.value }))} />
+   449→          </div>
+   450→          <div className="grid grid-cols-2 gap-2">
+   451→            <div>
+   452→              <Label className="text-xs">Status</Label>
+   453→              <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+   454→                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   455→                <SelectContent>
+   456→                  <SelectItem value="DRAFT">DRAFT</SelectItem>
+   457→                  <SelectItem value="PUBLISHED">PUBLISHED</SelectItem>
+   458→                  <SelectItem value="ARCHIVED">ARCHIVED</SelectItem>
+   459→                </SelectContent>
+   460→              </Select>
+   461→            </div>
+   462→            <div className="flex items-end gap-2">
+   463→              <Button size="sm" variant={form.pinned ? 'default' : 'outline'} onClick={() => setForm((f) => ({ ...f, pinned: !f.pinned }))}>
+   464→                {form.pinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
+   465→                {form.pinned ? 'Pinned' : 'Pin to top'}
+   466→              </Button>
+   467→            </div>
+   468→          </div>
+   469→        </div>
+   470→        <DialogFooter>
+   471→          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+   472→          <Button onClick={save} disabled={saving}>
+   473→            <Save className="h-3.5 w-3.5" /> {existing ? 'Save changes' : 'Create'}
+   474→          </Button>
+   475→        </DialogFooter>
+   476→      </DialogContent>
+   477→    </Dialog>
+   478→  )
+   479→}
+   480→
+   481→// ─── Facilities tab ──────────────────────────────────────────────────
+   482→const FACILITY_TYPES = ['SHELTER', 'HOSPITAL', 'RELIEF_CENTER', 'POLICE_STATION', 'FIRE_STATION', 'ASSEMBLY_POINT']
+   483→
+   484→function FacilitiesTab({ refreshKey, onRefresh }: { refreshKey: number; onRefresh: () => void }) {
+   485→  const [items, setItems] = React.useState<any[]>([])
+   486→  const [loading, setLoading] = React.useState(true)
+   487→  const [createOpen, setCreateOpen] = React.useState(false)
+   488→  const [editItem, setEditItem] = React.useState<any | null>(null)
+   489→
+   490→  const load = React.useCallback(async () => {
+   491→    setLoading(true)
+   492→    try {
+   493→      const res = await apiGet<{ items: any[] }>(`/api/admin/facilities`)
+   494→      setItems(res.items ?? [])
+   495→    } catch (e) {
+   496→      toast.error('Failed to load facilities', { description: String(e) })
+   497→    } finally {
+   498→      setLoading(false)
+   499→    }
+   500→  }, [])
+   501→
+   502→  React.useEffect(() => { load() }, [load, refreshKey])
+   503→
+   504→  async function closeFacility(id: string) {
+   505→    try {
+   506→      const res = await fetch(`/api/admin/facilities/${id}`, { method: 'DELETE' })
+   507→      if (!res.ok) throw new Error(`API ${res.status}`)
+   508→      toast.success('Facility closed', { description: 'Status set to CLOSED. Action logged.' })
+   509→      await load()
+   510→      onRefresh()
+   511→    } catch (e) {
+   512→      toast.error('Close failed', { description: String(e) })
+   513→    }
+   514→  }
+   515→
+   516→  return (
+   517→    <Card className="py-4">
+   518→      <CardHeader className="pb-2">
+   519→        <div className="flex items-center justify-between flex-wrap gap-2">
+   520→          <div>
+   521→            <CardTitle className="text-sm flex items-center gap-2">
+   522→              <Building2 className="h-4 w-4" /> Facilities
+   523→            </CardTitle>
+   524→            <CardDescription className="text-xs">Shelters, hospitals, relief centres, assembly points.</CardDescription>
+   525→          </div>
+   526→          <Button size="sm" onClick={() => setCreateOpen(true)}>
+   527→            <Plus className="h-3.5 w-3.5" /> New facility
+   528→          </Button>
+   529→        </div>
+   530→      </CardHeader>
+   531→      <CardContent>
+   532→        <div className="rounded-md border max-h-[60vh] overflow-y-auto scrollbar-thin">
+   533→          <Table>
+   534→            <TableHeader className="sticky top-0 bg-background z-10">
+   535→              <TableRow>
+   536→                <TableHead className="text-xs">Name</TableHead>
+   537→                <TableHead className="text-xs">Type</TableHead>
+   538→                <TableHead className="text-xs">Region</TableHead>
+   539→                <TableHead className="text-xs">Capacity</TableHead>
+   540→                <TableHead className="text-xs">Status</TableHead>
+   541→                <TableHead className="text-xs"></TableHead>
+   542→              </TableRow>
+   543→            </TableHeader>
+   544→            <TableBody>
+   545→              {loading && (
+   546→                <TableRow><TableCell colSpan={6} className="py-6 text-center text-xs text-muted-foreground">Loading…</TableCell></TableRow>
+   547→              )}
+   548→              {!loading && items.length === 0 && (
+   549→                <TableRow><TableCell colSpan={6} className="py-6 text-center text-xs text-muted-foreground">No facilities yet.</TableCell></TableRow>
+   550→              )}
+   551→              {!loading && items.map((f) => (
+   552→                <TableRow key={f.id}>
+   553→                  <TableCell>
+   554→                    <div className="text-xs font-medium">{f.name}</div>
+   555→                    <div className="text-[10px] text-muted-foreground font-mono">{f.lat.toFixed(3)}, {f.lng.toFixed(3)}</div>
+   556→                  </TableCell>
+   557→                  <TableCell><Badge variant="outline" className="text-[10px]">{f.facilityType}</Badge></TableCell>
+   558→                  <TableCell className="text-xs">{f.region?.canonicalName ?? '—'}</TableCell>
+   559→                  <TableCell className="text-xs">
+   560→                    {f.capacity ? `${f.availableUnits ?? 0} / ${f.capacity}` : '—'}
+   561→                  </TableCell>
+   562→                  <TableCell><StatusBadge status={f.status} /></TableCell>
+   563→                  <TableCell>
+   564→                    <div className="flex items-center gap-1">
+   565→                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditItem(f)} aria-label="Edit">
+   566→                        <Pencil className="h-3.5 w-3.5" />
+   567→                      </Button>
+   568→                      <AlertDialog>
+   569→                        <AlertDialogTrigger asChild>
+   570→                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600" aria-label="Close facility">
+   571→                            <Power className="h-3.5 w-3.5" />
+   572→                          </Button>
+   573→                        </AlertDialogTrigger>
+   574→                        <AlertDialogContent>
+   575→                          <AlertDialogHeader>
+   576→                            <AlertDialogTitle>Close “{f.name}”?</AlertDialogTitle>
+   577→                            <AlertDialogDescription>
+   578→                              Closes the facility (status: CLOSED) without deleting the record. Bulk actions are available in a future iteration.
+   579→                            </AlertDialogDescription>
+   580→                          </AlertDialogHeader>
+   581→                          <AlertDialogFooter>
+   582→                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+   583→                            <AlertDialogAction onClick={() => closeFacility(f.id)}>Close facility</AlertDialogAction>
+   584→                          </AlertDialogFooter>
+   585→                        </AlertDialogContent>
+   586→                      </AlertDialog>
+   587→                    </div>
+   588→                  </TableCell>
+   589→                </TableRow>
+   590→              ))}
+   591→            </TableBody>
+   592→          </Table>
+   593→        </div>
+   594→        <p className="text-[11px] text-muted-foreground mt-2">Action logged. Closing a facility preserves the record for audit.</p>
+   595→      </CardContent>
+   596→
+   597→      <FacilityFormDialog
+   598→        open={createOpen}
+   599→        onOpenChange={setCreateOpen}
+   600→        onSaved={async () => { await load(); onRefresh() }}
+   601→      />
+   602→      <FacilityFormDialog
+   603→        open={!!editItem}
+   604→        onOpenChange={(v) => !v && setEditItem(null)}
+   605→        existing={editItem}
+   606→        onSaved={async () => { setEditItem(null); await load(); onRefresh() }}
+   607→      />
+   608→    </Card>
+   609→  )
+   610→}
+   611→
+   612→function FacilityFormDialog({
+   613→  open, onOpenChange, existing, onSaved,
+   614→}: {
+   615→  open: boolean
+   616→  onOpenChange: (v: boolean) => void
+   617→  existing?: any | null
+   618→  onSaved: () => void
+   619→}) {
+   620→  const [form, setForm] = React.useState({
+   621→    facilityType: 'SHELTER', name: '', lat: 27.494, lng: 88.533, address: '', phone: '',
+   622→    capacity: 100, availableUnits: 50, hours: '24x7', status: 'OPEN', regionId: '',
+   623→  })
+   624→  const [regions, setRegions] = React.useState<any[]>([])
+   625→  const [saving, setSaving] = React.useState(false)
+   626→
+   627→  React.useEffect(() => {
+   628→    if (existing) {
+   629→      setForm({
+   630→        facilityType: existing.facilityType ?? 'SHELTER',
+   631→        name: existing.name ?? '',
+   632→        lat: existing.lat ?? 0,
+   633→        lng: existing.lng ?? 0,
+   634→        address: existing.address ?? '',
+   635→        phone: existing.phone ?? '',
+   636→        capacity: existing.capacity ?? 0,
+   637→        availableUnits: existing.availableUnits ?? 0,
+   638→        hours: existing.hours ?? '24x7',
+   639→        status: existing.status ?? 'OPEN',
+   640→        regionId: existing.regionId ?? '',
+   641→      })
+   642→    } else if (open) {
+   643→      setForm({
+   644→        facilityType: 'SHELTER', name: '', lat: 27.494, lng: 88.533, address: '', phone: '',
+   645→        capacity: 100, availableUnits: 50, hours: '24x7', status: 'OPEN', regionId: '',
+   646→      })
+   647→    }
+   648→  }, [existing, open])
+   649→
+   650→  React.useEffect(() => {
+   651→    if (open) {
+   652→      apiGet<{ items: any[] }>(`/api/admin/regions`).then((r) => setRegions(r.items ?? [])).catch(() => {})
+   653→    }
+   654→  }, [open])
+   655→
+   656→  async function save() {
+   657→    if (!form.name || form.lat == null || form.lng == null) {
+   658→      toast.error('Name, lat, lng are required')
+   659→      return
+   660→    }
+   661→    setSaving(true)
+   662→    try {
+   663→      const payload: any = {
+   664→        ...form,
+   665→        lat: Number(form.lat),
+   666→        lng: Number(form.lng),
+   667→        capacity: Number(form.capacity),
+   668→        availableUnits: Number(form.availableUnits),
+   669→        regionId: form.regionId || null,
+   670→      }
+   671→      if (existing) {
+   672→        await apiPatch(`/api/admin/facilities/${existing.id}`, payload)
+   673→        toast.success('Facility updated', { description: 'Action logged.' })
+   674→      } else {
+   675→        await apiPost(`/api/admin/facilities`, payload)
+   676→        toast.success('Facility created', { description: 'Action logged.' })
+   677→      }
+   678→      onSaved()
+   679→      onOpenChange(false)
+   680→    } catch (e) {
+   681→      toast.error('Failed to save facility', { description: String(e) })
+   682→    } finally {
+   683→      setSaving(false)
+   684→    }
+   685→  }
+   686→
+   687→  return (
+   688→    <Dialog open={open} onOpenChange={onOpenChange}>
+   689→      <DialogContent className="sm:max-w-lg">
+   690→        <DialogHeader>
+   691→          <DialogTitle>{existing ? 'Edit facility' : 'Create facility'}</DialogTitle>
+   692→          <DialogDescription>Facilities appear in the Safe Places & Routes view.</DialogDescription>
+   693→        </DialogHeader>
+   694→        <div className="space-y-3">
+   695→          <div className="grid grid-cols-2 gap-2">
+   696→            <div>
+   697→              <Label className="text-xs">Type</Label>
+   698→              <Select value={form.facilityType} onValueChange={(v) => setForm((f) => ({ ...f, facilityType: v }))}>
+   699→                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   700→                <SelectContent>
+   701→                  {FACILITY_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+   702→                </SelectContent>
+   703→              </Select>
+   704→            </div>
+   705→            <div>
+   706→              <Label className="text-xs">Status</Label>
+   707→              <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+   708→                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   709→                <SelectContent>
+   710→                  <SelectItem value="OPEN">OPEN</SelectItem>
+   711→                  <SelectItem value="CLOSED">CLOSED</SelectItem>
+   712→                  <SelectItem value="FULL">FULL</SelectItem>
+   713→                </SelectContent>
+   714→              </Select>
+   715→            </div>
+   716→          </div>
+   717→          <div>
+   718→            <Label className="text-xs">Name</Label>
+   719→            <Input className="h-9 text-sm" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+   720→          </div>
+   721→          <div className="grid grid-cols-2 gap-2">
+   722→            <div>
+   723→              <Label className="text-xs">Lat</Label>
+   724→              <Input className="h-9 text-sm" type="number" step="0.0001" value={form.lat} onChange={(e) => setForm((f) => ({ ...f, lat: Number(e.target.value) }))} />
+   725→            </div>
+   726→            <div>
+   727→              <Label className="text-xs">Lng</Label>
+   728→              <Input className="h-9 text-sm" type="number" step="0.0001" value={form.lng} onChange={(e) => setForm((f) => ({ ...f, lng: Number(e.target.value) }))} />
+   729→            </div>
+   730→          </div>
+   731→          <div className="grid grid-cols-2 gap-2">
+   732→            <div>
+   733→              <Label className="text-xs">Capacity</Label>
+   734→              <Input className="h-9 text-sm" type="number" value={form.capacity} onChange={(e) => setForm((f) => ({ ...f, capacity: Number(e.target.value) }))} />
+   735→            </div>
+   736→            <div>
+   737→              <Label className="text-xs">Available units</Label>
+   738→              <Input className="h-9 text-sm" type="number" value={form.availableUnits} onChange={(e) => setForm((f) => ({ ...f, availableUnits: Number(e.target.value) }))} />
+   739→            </div>
+   740→          </div>
+   741→          <div>
+   742→            <Label className="text-xs">Address</Label>
+   743→            <Input className="h-9 text-sm" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
+   744→          </div>
+   745→          <div className="grid grid-cols-2 gap-2">
+   746→            <div>
+   747→              <Label className="text-xs">Phone</Label>
+   748→              <Input className="h-9 text-sm" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+   749→            </div>
+   750→            <div>
+   751→              <Label className="text-xs">Hours</Label>
+   752→              <Input className="h-9 text-sm" value={form.hours} onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))} />
+   753→            </div>
+   754→          </div>
+   755→          <div>
+   756→            <Label className="text-xs">Region (optional)</Label>
+   757→            <Select value={form.regionId || '__none__'} onValueChange={(v) => setForm((f) => ({ ...f, regionId: v === '__none__' ? '' : v }))}>
+   758→              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="No region" /></SelectTrigger>
+   759→              <SelectContent>
+   760→                <SelectItem value="__none__">No region</SelectItem>
+   761→                {regions.map((r) => (
+   762→                  <SelectItem key={r.id} value={r.id}>{r.canonicalName}</SelectItem>
+   763→                ))}
+   764→              </SelectContent>
+   765→            </Select>
+   766→          </div>
+   767→        </div>
+   768→        <DialogFooter>
+   769→          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+   770→          <Button onClick={save} disabled={saving}>
+   771→            <Save className="h-3.5 w-3.5" /> {existing ? 'Save changes' : 'Create'}
+   772→          </Button>
+   773→        </DialogFooter>
+   774→      </DialogContent>
+   775→    </Dialog>
+   776→  )
+   777→}
+   778→
+   779→// ─── Localities (regions) tab ────────────────────────────────────────
+   780→const REGION_TYPES = ['STATE', 'DISTRICT', 'LOCALITY']
+   781→const COVERAGE_STATUSES = ['CONFIGURED', 'DATA_CONNECTED', 'DEMO', 'INACTIVE']
+   782→const LANGS = ['en', 'hi', 'ne', 'as']
+   783→
+   784→function LocalitiesTab({ refreshKey, onRefresh }: { refreshKey: number; onRefresh: () => void }) {
+   785→  const [items, setItems] = React.useState<any[]>([])
+   786→  const [loading, setLoading] = React.useState(true)
+   787→  const [createOpen, setCreateOpen] = React.useState(false)
+   788→  const [editItem, setEditItem] = React.useState<any | null>(null)
+   789→
+   790→  const load = React.useCallback(async () => {
+   791→    setLoading(true)
+   792→    try {
+   793→      const res = await apiGet<{ items: any[] }>(`/api/admin/regions`)
+   794→      setItems(res.items ?? [])
+   795→    } catch (e) {
+   796→      toast.error('Failed to load regions', { description: String(e) })
+   797→    } finally {
+   798→      setLoading(false)
+   799→    }
+   800→  }, [])
+   801→
+   802→  React.useEffect(() => { load() }, [load, refreshKey])
+   803→
+   804→  return (
+   805→    <Card className="py-4">
+   806→      <CardHeader className="pb-2">
+   807→        <div className="flex items-center justify-between flex-wrap gap-2">
+   808→          <div>
+   809→            <CardTitle className="text-sm flex items-center gap-2">
+   810→              <MapPin className="h-4 w-4" /> Localities & regions
+   811→            </CardTitle>
+   812→            <CardDescription className="text-xs">State / district / locality registry with coverage status.</CardDescription>
+   813→          </div>
+   814→          <Button size="sm" onClick={() => setCreateOpen(true)}>
+   815→            <Plus className="h-3.5 w-3.5" /> New region
+   816→          </Button>
+   817→        </div>
+   818→      </CardHeader>
+   819→      <CardContent>
+   820→        <div className="rounded-md border max-h-[60vh] overflow-y-auto scrollbar-thin">
+   821→          <Table>
+   822→            <TableHeader className="sticky top-0 bg-background z-10">
+   823→              <TableRow>
+   824→                <TableHead className="text-xs">Canonical name</TableHead>
+   825→                <TableHead className="text-xs">Local name</TableHead>
+   826→                <TableHead className="text-xs">Type</TableHead>
+   827→                <TableHead className="text-xs">Language</TableHead>
+   828→                <TableHead className="text-xs">Coverage</TableHead>
+   829→                <TableHead className="text-xs">Coords</TableHead>
+   830→                <TableHead className="text-xs"></TableHead>
+   831→              </TableRow>
+   832→            </TableHeader>
+   833→            <TableBody>
+   834→              {loading && (
+   835→                <TableRow><TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">Loading…</TableCell></TableRow>
+   836→              )}
+   837→              {!loading && items.length === 0 && (
+   838→                <TableRow><TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">No regions yet.</TableCell></TableRow>
+   839→              )}
+   840→              {!loading && items.map((r) => (
+   841→                <TableRow key={r.id}>
+   842→                  <TableCell className="text-xs font-medium">{r.canonicalName}</TableCell>
+   843→                  <TableCell className="text-xs">{r.localName ?? '—'}</TableCell>
+   844→                  <TableCell><Badge variant="outline" className="text-[10px]">{r.regionType}</Badge></TableCell>
+   845→                  <TableCell className="text-xs">{r.defaultLanguage}</TableCell>
+   846→                  <TableCell><StatusBadge status={r.coverageStatus} /></TableCell>
+   847→                  <TableCell className="text-[11px] font-mono text-muted-foreground">{r.lat.toFixed(3)}, {r.lng.toFixed(3)}</TableCell>
+   848→                  <TableCell>
+   849→                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditItem(r)} aria-label="Edit">
+   850→                      <Pencil className="h-3.5 w-3.5" />
+   851→                    </Button>
+   852→                  </TableCell>
+   853→                </TableRow>
+   854→              ))}
+   855→            </TableBody>
+   856→          </Table>
+   857→        </div>
+   858→        <p className="text-[11px] text-muted-foreground mt-2">Action logged.</p>
+   859→      </CardContent>
+   860→
+   861→      <RegionFormDialog
+   862→        open={createOpen}
+   863→        onOpenChange={setCreateOpen}
+   864→        onSaved={async () => { await load(); onRefresh() }}
+   865→      />
+   866→      <RegionFormDialog
+   867→        open={!!editItem}
+   868→        onOpenChange={(v) => !v && setEditItem(null)}
+   869→        existing={editItem}
+   870→        onSaved={async () => { setEditItem(null); await load(); onRefresh() }}
+   871→      />
+   872→    </Card>
+   873→  )
+   874→}
+   875→
+   876→function RegionFormDialog({
+   877→  open, onOpenChange, existing, onSaved,
+   878→}: {
+   879→  open: boolean
+   880→  onOpenChange: (v: boolean) => void
+   881→  existing?: any | null
+   882→  onSaved: () => void
+   883→}) {
+   884→  const [form, setForm] = React.useState({
+   885→    canonicalName: '', regionType: 'LOCALITY', lat: 27.494, lng: 88.533,
+   886→    localName: '', defaultLanguage: 'en', coverageStatus: 'DEMO',
+   887→  })
+   888→  const [saving, setSaving] = React.useState(false)
+   889→
+   890→  React.useEffect(() => {
+   891→    if (existing) {
+   892→      setForm({
+   893→        canonicalName: existing.canonicalName ?? '',
+   894→        regionType: existing.regionType ?? 'LOCALITY',
+   895→        lat: existing.lat ?? 0,
+   896→        lng: existing.lng ?? 0,
+   897→        localName: existing.localName ?? '',
+   898→        defaultLanguage: existing.defaultLanguage ?? 'en',
+   899→        coverageStatus: existing.coverageStatus ?? 'DEMO',
+   900→      })
+   901→    } else if (open) {
+   902→      setForm({
+   903→        canonicalName: '', regionType: 'LOCALITY', lat: 27.494, lng: 88.533,
+   904→        localName: '', defaultLanguage: 'en', coverageStatus: 'DEMO',
+   905→      })
+   906→    }
+   907→  }, [existing, open])
+   908→
+   909→  async function save() {
+   910→    if (!existing && (!form.canonicalName || !form.regionType)) {
+   911→      toast.error('Canonical name and region type are required')
+   912→      return
+   913→    }
+   914→    setSaving(true)
+   915→    try {
+   916→      if (existing) {
+   917→        await apiPatch(`/api/admin/regions/${existing.id}`, {
+   918→          localName: form.localName,
+   919→          coverageStatus: form.coverageStatus,
+   920→          defaultLanguage: form.defaultLanguage,
+   921→        })
+   922→        toast.success('Region updated', { description: 'Action logged.' })
+   923→      } else {
+   924→        await apiPost(`/api/admin/regions`, {
+   925→          ...form,
+   926→          lat: Number(form.lat),
+   927→          lng: Number(form.lng),
+   928→        })
+   929→        toast.success('Region created', { description: 'Action logged.' })
+   930→      }
+   931→      onSaved()
+   932→      onOpenChange(false)
+   933→    } catch (e) {
+   934→      toast.error('Failed to save region', { description: String(e) })
+   935→    } finally {
+   936→      setSaving(false)
+   937→    }
+   938→  }
+   939→
+   940→  return (
+   941→    <Dialog open={open} onOpenChange={onOpenChange}>
+   942→      <DialogContent className="sm:max-w-lg">
+   943→        <DialogHeader>
+   944→          <DialogTitle>{existing ? 'Edit region' : 'Create region'}</DialogTitle>
+   945→          <DialogDescription>
+   946→            Regions back geofenced alerts and facility mappings.
+   947→            {existing && ' Edits are limited to local name, coverage status, and default language.'}
+   948→          </DialogDescription>
+   949→        </DialogHeader>
+   950→        <div className="space-y-3">
+   951→          {!existing && (
+   952→            <>
+   953→              <div>
+   954→                <Label className="text-xs">Canonical name</Label>
+   955→                <Input className="h-9 text-sm" value={form.canonicalName} onChange={(e) => setForm((f) => ({ ...f, canonicalName: e.target.value }))} placeholder="e.g. Mangan, Sikkim" />
+   956→              </div>
+   957→              <div className="grid grid-cols-2 gap-2">
+   958→                <div>
+   959→                  <Label className="text-xs">Region type</Label>
+   960→                  <Select value={form.regionType} onValueChange={(v) => setForm((f) => ({ ...f, regionType: v }))}>
+   961→                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   962→                    <SelectContent>
+   963→                      {REGION_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+   964→                    </SelectContent>
+   965→                  </Select>
+   966→                </div>
+   967→                <div>
+   968→                  <Label className="text-xs">Local name (local script)</Label>
+   969→                  <Input className="h-9 text-sm" value={form.localName} onChange={(e) => setForm((f) => ({ ...f, localName: e.target.value }))} />
+   970→                </div>
+   971→              </div>
+   972→              <div className="grid grid-cols-2 gap-2">
+   973→                <div>
+   974→                  <Label className="text-xs">Lat</Label>
+   975→                  <Input className="h-9 text-sm" type="number" step="0.0001" value={form.lat} onChange={(e) => setForm((f) => ({ ...f, lat: Number(e.target.value) }))} />
+   976→                </div>
+   977→                <div>
+   978→                  <Label className="text-xs">Lng</Label>
+   979→                  <Input className="h-9 text-sm" type="number" step="0.0001" value={form.lng} onChange={(e) => setForm((f) => ({ ...f, lng: Number(e.target.value) }))} />
+   980→                </div>
+   981→              </div>
+   982→            </>
+   983→          )}
+   984→          {existing && (
+   985→            <div>
+   986→              <Label className="text-xs">Local name</Label>
+   987→              <Input className="h-9 text-sm" value={form.localName} onChange={(e) => setForm((f) => ({ ...f, localName: e.target.value }))} />
+   988→            </div>
+   989→          )}
+   990→          <div className="grid grid-cols-2 gap-2">
+   991→            <div>
+   992→              <Label className="text-xs">Default language</Label>
+   993→              <Select value={form.defaultLanguage} onValueChange={(v) => setForm((f) => ({ ...f, defaultLanguage: v }))}>
+   994→                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   995→                <SelectContent>
+   996→                  {LANGS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+   997→                </SelectContent>
+   998→              </Select>
+   999→            </div>
+  1000→            <div>
+  1001→              <Label className="text-xs">Coverage status</Label>
+  1002→              <Select value={form.coverageStatus} onValueChange={(v) => setForm((f) => ({ ...f, coverageStatus: v }))}>
+  1003→                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+  1004→                <SelectContent>
+  1005→                  {COVERAGE_STATUSES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+  1006→                </SelectContent>
+  1007→              </Select>
+  1008→            </div>
+  1009→          </div>
+  1010→        </div>
+  1011→        <DialogFooter>
+  1012→          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+  1013→          <Button onClick={save} disabled={saving}>
+  1014→            <Save className="h-3.5 w-3.5" /> {existing ? 'Save changes' : 'Create'}
+  1015→          </Button>
+  1016→        </DialogFooter>
+  1017→      </DialogContent>
+  1018→    </Dialog>
+  1019→  )
+  1020→}
+  1021→
+  1022→// ─── Volunteers tab ─────────────────────────────────────────────────
+  1023→function VolunteersTab({ refreshKey, onRefresh }: { refreshKey: number; onRefresh: () => void }) {
+  1024→  const [items, setItems] = React.useState<any[]>([])
+  1025→  const [loading, setLoading] = React.useState(true)
+  1026→
+  1027→  const load = React.useCallback(async () => {
+  1028→    setLoading(true)
+  1029→    try {
+  1030→      const res = await apiGet<{ items: any[] }>(`/api/admin/volunteers`)
+  1031→      setItems(res.items ?? [])
+  1032→    } catch (e) {
+  1033→      toast.error('Failed to load volunteers', { description: String(e) })
+  1034→    } finally {
+  1035→      setLoading(false)
+  1036→    }
+  1037→  }, [])
+  1038→
+  1039→  React.useEffect(() => { load() }, [load, refreshKey])
+  1040→
+  1041→  async function act(id: string, action: 'approve' | 'reject') {
+  1042→    try {
+  1043→      await apiPatch(`/api/admin/volunteers`, { id, action })
+  1044→      toast.success(`Volunteer ${action === 'approve' ? 'approved' : 'rejected'}`, { description: 'Action logged.' })
+  1045→      await load()
+  1046→      onRefresh()
+  1047→    } catch (e) {
+  1048→      toast.error(`Failed to ${action} volunteer`, { description: String(e) })
+  1049→    }
+  1050→  }
+  1051→
+  1052→  return (
+  1053→    <Card className="py-4">
+  1054→      <CardHeader className="pb-2">
+  1055→        <CardTitle className="text-sm flex items-center gap-2">
+  1056→          <Users className="h-4 w-4" /> Volunteer profiles
+  1057→        </CardTitle>
+  1058→        <CardDescription className="text-xs">Verify or reject volunteer applications.</CardDescription>
+  1059→      </CardHeader>
+  1060→      <CardContent>
+  1061→        <div className="rounded-md border max-h-[60vh] overflow-y-auto scrollbar-thin">
+  1062→          <Table>
+  1063→            <TableHeader className="sticky top-0 bg-background z-10">
+  1064→              <TableRow>
+  1065→                <TableHead className="text-xs">Name</TableHead>
+  1066→                <TableHead className="text-xs">Skills</TableHead>
+  1067→                <TableHead className="text-xs">Languages</TableHead>
+  1068→                <TableHead className="text-xs">Service regions</TableHead>
+  1069→                <TableHead className="text-xs">Availability</TableHead>
+  1070→                <TableHead className="text-xs">Verification</TableHead>
+  1071→                <TableHead className="text-xs"></TableHead>
+  1072→              </TableRow>
+  1073→            </TableHeader>
+  1074→            <TableBody>
+  1075→              {loading && (
+  1076→                <TableRow><TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">Loading…</TableCell></TableRow>
+  1077→              )}
+  1078→              {!loading && items.length === 0 && (
+  1079→                <TableRow><TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">No volunteer profiles.</TableCell></TableRow>
+  1080→              )}
+  1081→              {!loading && items.map((v) => (
+  1082→                <TableRow key={v.id}>
+  1083→                  <TableCell>
+  1084→                    <div className="text-xs font-medium">{v.user?.name ?? 'Volunteer'}</div>
+  1085→                    <div className="text-[10px] text-muted-foreground">{v.user?.email}</div>
+  1086→                  </TableCell>
+  1087→                  <TableCell className="text-xs">{v.skills || '—'}</TableCell>
+  1088→                  <TableCell className="text-xs">{v.languages || '—'}</TableCell>
+  1089→                  <TableCell className="text-xs">{v.serviceRegions || '—'}</TableCell>
+  1090→                  <TableCell><StatusBadge status={v.availabilityStatus} /></TableCell>
+  1091→                  <TableCell><StatusBadge status={v.verificationStatus} /></TableCell>
+  1092→                  <TableCell>
+  1093→                    <div className="flex items-center gap-1">
+  1094→                      <Button
+  1095→                        size="sm"
+  1096→                        variant="outline"
+  1097→                        className="h-7 text-xs"
+  1098→                        disabled={v.verificationStatus === 'VERIFIED'}
+  1099→                        onClick={() => act(v.id, 'approve')}
+  1100→                      >
+  1101→                        <CheckCircle2 className="h-3 w-3" /> Approve
+  1102→                      </Button>
+  1103→                      <AlertDialog>
+  1104→                        <AlertDialogTrigger asChild>
+  1105→                          <Button
+  1106→                            size="sm"
+  1107→                            variant="ghost"
+  1108→                            className="h-7 text-xs text-red-600"
+  1109→                            disabled={v.verificationStatus === 'REJECTED'}
+  1110→                          >
+  1111→                            <X className="h-3 w-3" /> Reject
+  1112→                          </Button>
+  1113→                        </AlertDialogTrigger>
+  1114→                        <AlertDialogContent>
+  1115→                          <AlertDialogHeader>
+  1116→                            <AlertDialogTitle>Reject volunteer “{v.user?.name}”?</AlertDialogTitle>
+  1117→                            <AlertDialogDescription>
+  1118→                              Sets verification status to REJECTED. The volunteer keeps their profile for audit; they will not be assigned new tasks.
+  1119→                            </AlertDialogDescription>
+  1120→                          </AlertDialogHeader>
+  1121→                          <AlertDialogFooter>
+  1122→                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+  1123→                            <AlertDialogAction onClick={() => act(v.id, 'reject')}>Reject</AlertDialogAction>
+  1124→                          </AlertDialogFooter>
+  1125→                        </AlertDialogContent>
+  1126→                      </AlertDialog>
+  1127→                    </div>
+  1128→                  </TableCell>
+  1129→                </TableRow>
+  1130→              ))}
+  1131→            </TableBody>
+  1132→          </Table>
+  1133→        </div>
+  1134→        <p className="text-[11px] text-muted-foreground mt-2">Action logged. approvedBy = seeded admin, approvedAt = now.</p>
+  1135→      </CardContent>
+  1136→    </Card>
+  1137→  )
+  1138→}
+  1139→
+  1140→// ─── Settings tab ────────────────────────────────────────────────────
+  1141→function SettingsTab({ refreshKey, onRefresh }: { refreshKey: number; onRefresh: () => void }) {
+  1142→  const [items, setItems] = React.useState<any[]>([])
+  1143→  const [loading, setLoading] = React.useState(true)
+  1144→  const [editingKey, setEditingKey] = React.useState<string | null>(null)
+  1145→  const [editValue, setEditValue] = React.useState('')
+  1146→
+  1147→  const load = React.useCallback(async () => {
+  1148→    setLoading(true)
+  1149→    try {
+  1150→      const res = await apiGet<{ items: any[] }>(`/api/admin/settings`)
+  1151→      setItems(res.items ?? [])
+  1152→    } catch (e) {
+  1153→      toast.error('Failed to load settings', { description: String(e) })
+  1154→    } finally {
+  1155→      setLoading(false)
+  1156→    }
+  1157→  }, [])
+  1158→
+  1159→  React.useEffect(() => { load() }, [load, refreshKey])
+  1160→
+  1161→  async function save(key: string, value: string) {
+  1162→    try {
+  1163→      await apiPatch(`/api/admin/settings`, { key, value })
+  1164→      toast.success(`Setting “${key}” updated`, { description: 'Action logged.' })
+  1165→      setEditingKey(null)
+  1166→      await load()
+  1167→      onRefresh()
+  1168→    } catch (e) {
+  1169→      toast.error('Failed to update setting', { description: String(e) })
+  1170→    }
+  1171→  }
+  1172→
+  1173→  return (
+  1174→    <Card className="py-4">
+  1175→      <CardHeader className="pb-2">
+  1176→        <CardTitle className="text-sm flex items-center gap-2">
+  1177→          <Settings className="h-4 w-4" /> System settings
+  1178→        </CardTitle>
+  1179→        <CardDescription className="text-xs">
+  1180→          Key/value store. Includes <code className="font-mono">demo.simulationMode</code>,{' '}
+  1181→          <code className="font-mono">branding.productName</code>,{' '}
+  1182→          <code className="font-mono">map.defaultExtent</code>.
+  1183→        </CardDescription>
+  1184→      </CardHeader>
+  1185→      <CardContent>
+  1186→        <div className="rounded-md border max-h-[60vh] overflow-y-auto scrollbar-thin">
+  1187→          <Table>
+  1188→            <TableHeader className="sticky top-0 bg-background z-10">
+  1189→              <TableRow>
+  1190→                <TableHead className="text-xs">Key</TableHead>
+  1191→                <TableHead className="text-xs">Value</TableHead>
+  1192→                <TableHead className="text-xs">Updated</TableHead>
+  1193→                <TableHead className="text-xs"></TableHead>
+  1194→              </TableRow>
+  1195→            </TableHeader>
+  1196→            <TableBody>
+  1197→              {loading && (
+  1198→                <TableRow><TableCell colSpan={4} className="py-6 text-center text-xs text-muted-foreground">Loading…</TableCell></TableRow>
+  1199→              )}
+  1200→              {!loading && items.length === 0 && (
+  1201→                <TableRow><TableCell colSpan={4} className="py-6 text-center text-xs text-muted-foreground">No settings yet.</TableCell></TableRow>
+  1202→              )}
+  1203→              {!loading && items.map((s) => (
+  1204→                <TableRow key={s.id}>
+  1205→                  <TableCell className="font-mono text-[11px]">{s.key}</TableCell>
+  1206→                  <TableCell>
+  1207→                    {editingKey === s.key ? (
+  1208→                      <Textarea
+  1209→                        className="text-xs min-h-12 max-w-[420px]"
+  1210→                        value={editValue}
+  1211→                        onChange={(e) => setEditValue(e.target.value)}
+  1212→                      />
+  1213→                    ) : (
+  1214→                      <span className="font-mono text-[11px] block max-w-[420px] truncate">{s.value}</span>
+  1215→                    )}
+  1216→                  </TableCell>
+  1217→                  <TableCell className="text-xs">{formatRelativeTime(s.updatedAt)}</TableCell>
+  1218→                  <TableCell>
+  1219→                    {editingKey === s.key ? (
+  1220→                      <div className="flex items-center gap-1">
+  1221→                        <Button size="sm" className="h-7 text-xs" onClick={() => save(s.key, editValue)}>
+  1222→                          <Save className="h-3 w-3" /> Save
+  1223→                        </Button>
+  1224→                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingKey(null)}>
+  1225→                          Cancel
+  1226→                        </Button>
+  1227→                      </div>
+  1228→                    ) : (
+  1229→                      <Button
+  1230→                        size="sm"
+  1231→                        variant="ghost"
+  1232→                        className="h-7 w-7 p-0"
+  1233→                        onClick={() => { setEditingKey(s.key); setEditValue(s.value) }}
+  1234→                        aria-label="Edit setting"
+  1235→                      >
+  1236→                        <Pencil className="h-3.5 w-3.5" />
+  1237→                      </Button>
+  1238→                    )}
+  1239→                  </TableCell>
+  1240→                </TableRow>
+  1241→              ))}
+  1242→            </TableBody>
+  1243→          </Table>
+  1244→        </div>
+  1245→        <p className="text-[11px] text-muted-foreground mt-2">
+  1246→          Tip: edit values as JSON-encoded strings (e.g. <code>true</code>,{' '}
+  1247→          <code>"PurvaGuard AI"</code>, <code>{'{"minLat":23,"maxLat":35,"minLng":76,"maxLng":96}'}</code>).
+  1248→        </p>
+  1249→      </CardContent>
+  1250→    </Card>
+  1251→  )
+  1252→}
+  1253→
+  1254→// ─── Top-level view ─────────────────────────────────────────────────
+  1255→export default function AdminView() {
+  1256→  const { role, setView } = useApp()
+  1257→  const [tab, setTab] = React.useState('overview')
+  1258→  const [refreshKey, setRefreshKey] = React.useState(0)
+  1259→  const triggerRefresh = React.useCallback(() => setRefreshKey((k) => k + 1), [])
+  1260→
+  1261→  if (role !== 'ADMIN') return <LockedCard />
+  1262→
+  1263→  return (
+  1264→    <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
+  1265→      {/* Page header */}
+  1266→      <div className="flex items-center justify-between flex-wrap gap-2">
+  1267→        <div className="flex items-center gap-2">
+  1268→          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+  1269→            <Settings className="h-5 w-5" />
+  1270→          </div>
+  1271→          <div>
+  1272→            <h1 className="text-lg font-bold leading-tight">Admin Console</h1>
+  1273→            <p className="text-xs text-muted-foreground">
+  1274→              Platform configuration · news · facilities · localities · volunteers · settings
+  1275→            </p>
+  1276→          </div>
+  1277→        </div>
+  1278→        <div className="flex items-center gap-1">
+  1279→          <Badge variant="outline" className="text-[10px]">Role: {role}</Badge>
+  1280→          <Button size="sm" variant="outline" onClick={() => setView('home')}>
+  1281→            <Settings className="h-3.5 w-3.5" /> Exit
+  1282→          </Button>
+  1283→        </div>
+  1284→      </div>
+  1285→
+  1286→      <Tabs value={tab} onValueChange={setTab}>
+  1287→        <TabsList className="w-full sm:w-auto overflow-x-auto scrollbar-thin">
+  1288→          <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
+  1289→          <TabsTrigger value="news" className="text-xs">News</TabsTrigger>
+  1290→          <TabsTrigger value="facilities" className="text-xs">Facilities</TabsTrigger>
+  1291→          <TabsTrigger value="localities" className="text-xs">Localities</TabsTrigger>
+  1292→          <TabsTrigger value="volunteers" className="text-xs">Volunteers</TabsTrigger>
+  1293→          <TabsTrigger value="settings" className="text-xs">Settings</TabsTrigger>
+  1294→        </TabsList>
+  1295→
+  1296→        <TabsContent value="overview" className="mt-4">
+  1297→          <OverviewTab />
+  1298→        </TabsContent>
+  1299→        <TabsContent value="news" className="mt-4">
+  1300→          <NewsTab refreshKey={refreshKey} onRefresh={triggerRefresh} />
+  1301→        </TabsContent>
+  1302→        <TabsContent value="facilities" className="mt-4">
+  1303→          <FacilitiesTab refreshKey={refreshKey} onRefresh={triggerRefresh} />
+  1304→        </TabsContent>
+  1305→        <TabsContent value="localities" className="mt-4">
+  1306→          <LocalitiesTab refreshKey={refreshKey} onRefresh={triggerRefresh} />
+  1307→        </TabsContent>
+  1308→        <TabsContent value="volunteers" className="mt-4">
+  1309→          <VolunteersTab refreshKey={refreshKey} onRefresh={triggerRefresh} />
+  1310→        </TabsContent>
+  1311→        <TabsContent value="settings" className="mt-4">
+  1312→          <SettingsTab refreshKey={refreshKey} onRefresh={triggerRefresh} />
+  1313→        </TabsContent>
+  1314→      </Tabs>
+  1315→    </div>
+  1316→  )
+  1317→}
+  1318→

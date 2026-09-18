@@ -13,8 +13,7 @@ export type ViewId =
   | 'volunteer'
   | 'preparedness'
   | 'news'
-  | 'assistant'
-  | 'operations'
+  | 'prediction'
   | 'admin'
 
 export type Severity = 'INFORMATIONAL' | 'ADVISORY' | 'WATCH' | 'WARNING' | 'EMERGENCY'
@@ -32,27 +31,45 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: 'Home', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
   { id: 'map', label: 'Live Map', icon: 'Map', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
+  { id: 'prediction', label: 'AI Prediction', icon: 'BrainCircuit', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
   { id: 'risk', label: 'Risk & Forecast', icon: 'Activity', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
   { id: 'alerts', label: 'Alerts', icon: 'BellRing', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
   { id: 'sos', label: 'SOS / Get Help', icon: 'Siren', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
   { id: 'safe-places', label: 'Safe Places & Routes', icon: 'ShieldCheck', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
-  { id: 'reports', label: 'Community Reports', icon: 'Megaphone', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
+  { id: 'reports', label: 'Report a Hazard', icon: 'Megaphone', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
   { id: 'volunteer', label: 'Volunteer / NGO', icon: 'HandHeart', roles: ['PUBLIC', 'VOLUNTEER', 'ADMIN', 'DISTRICT_OPERATOR', 'STATE_OPERATOR'], group: 'public' },
   { id: 'preparedness', label: 'Preparedness', icon: 'BookOpen', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
   { id: 'news', label: 'News & Updates', icon: 'Newspaper', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
-  { id: 'assistant', label: 'AI Assistant', icon: 'Bot', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'public' },
-  { id: 'operations', label: 'Operations Dashboard', icon: 'LayoutDashboard', roles: ['DISTRICT_OPERATOR', 'ADMIN', 'STATE_OPERATOR'], group: 'operations' },
-  { id: 'admin', label: 'Admin Console', icon: 'Settings', roles: ['ADMIN'], group: 'operations' },
+  { id: 'admin', label: 'Admin Dashboard', icon: 'LayoutDashboard', roles: ['PUBLIC', 'DISTRICT_OPERATOR', 'ADMIN', 'VOLUNTEER', 'STATE_OPERATOR', 'ANALYST'], group: 'operations' },
 ]
 
-export const HAZARD_META: Record<HazardType, { label: string; color: string; icon: string }> = {
-  LANDSLIDE: { label: 'Landslide', color: 'amber', icon: 'Mountain' },
-  FLASH_FLOOD: { label: 'Flash Flood', color: 'cyan', icon: 'Waves' },
-  HEAVY_RAIN: { label: 'Heavy Rain', color: 'sky', icon: 'CloudRain' },
-  EARTHQUAKE: { label: 'Earthquake', color: 'violet', icon: 'Activity' },
-  ROAD_BLOCK: { label: 'Road Block', color: 'orange', icon: 'Road' },
-  GENERAL: { label: 'General', color: 'slate', icon: 'Info' },
+export const HAZARD_META: Record<HazardType, { label: string; color: string; icon: string; image: string }> = {
+  LANDSLIDE: { label: 'Landslide', color: 'amber', icon: 'Mountain', image: '/hazard-landslide.png' },
+  FLASH_FLOOD: { label: 'Flash Flood', color: 'cyan', icon: 'Waves', image: '/hazard-flood.png' },
+  HEAVY_RAIN: { label: 'Heavy Rain', color: 'sky', icon: 'CloudRain', image: '/hazard-rain.png' },
+  EARTHQUAKE: { label: 'Earthquake', color: 'violet', icon: 'Activity', image: '/hazard-earthquake.png' },
+  ROAD_BLOCK: { label: 'Road Block', color: 'orange', icon: 'Route', image: '/hazard-landslide.png' },
+  GENERAL: { label: 'General', color: 'slate', icon: 'Info', image: '/hero-himalaya.png' },
 }
+
+// Images used throughout the site
+export const SITE_IMAGES = {
+  hero: '/hero-himalaya.png',
+  mapBg: '/map-ne-india.png',
+  rescue: '/rescue-shelter.png',
+  emergencyKit: '/emergency-kit.png',
+  localityTown: '/locality-town.png',
+} as const
+
+// The 6 SMS recipients the user specified (demo sample numbers)
+export const DEFAULT_SMS_RECIPIENTS = [
+  { phone: '917666891772', name: 'Recipient 1' },
+  { phone: '919236075390', name: 'Recipient 2' },
+  { phone: '918233709073', name: 'Recipient 3' },
+  { phone: '919149882790', name: 'Recipient 4' },
+  { phone: '918439410976', name: 'Recipient 5' },
+  { phone: '917667585166', name: 'Recipient 6' },
+] as const
 
 export const SEVERITY_META: Record<Severity, { label: string; badgeClass: string; dotClass: string }> = {
   INFORMATIONAL: { label: 'Informational', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700', dotClass: 'bg-slate-400' },
@@ -78,17 +95,28 @@ export const VERIFICATION_META: Record<string, { label: string; badgeClass: stri
   UNVERIFIED: { label: 'Unverified', badgeClass: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700' },
 }
 
+// North Eastern Region focus — all 8 NE states + Sikkim
 export const DEMO_REGIONS = [
   { name: 'Mangan, Sikkim', state: 'Sikkim', lat: 27.494, lng: 88.533, localName: 'मङ्गन' },
   { name: 'Gangtok, Sikkim', state: 'Sikkim', lat: 27.338, lng: 88.606, localName: 'गान्तोक' },
-  { name: 'Joshimath, Uttarakhand', state: 'Uttarakhand', lat: 30.554, lng: 79.565, localName: 'जोशीमठ' },
-  { name: 'Mandi, Himachal Pradesh', state: 'Himachal Pradesh', lat: 31.71, lng: 76.532, localName: 'मंडी' },
+  { name: 'Chungthang, Sikkim', state: 'Sikkim', lat: 27.595, lng: 88.641, localName: 'चुंगथाङ' },
   { name: 'Itanagar, Arunachal Pradesh', state: 'Arunachal Pradesh', lat: 27.084, lng: 93.605, localName: 'ईटानगर' },
+  { name: 'Tawang, Arunachal Pradesh', state: 'Arunachal Pradesh', lat: 27.586, lng: 91.659, localName: 'तवांग' },
+  { name: 'Bomdila, Arunachal Pradesh', state: 'Arunachal Pradesh', lat: 27.264, lng: 92.416, localName: 'बोमडिला' },
+  { name: 'Ziro, Arunachal Pradesh', state: 'Arunachal Pradesh', lat: 27.545, lng: 93.837, localName: 'जीरो' },
   { name: 'Guwahati, Assam', state: 'Assam', lat: 26.144, lng: 91.736, localName: 'গুৱাহাটী' },
+  { name: 'Dibrugarh, Assam', state: 'Assam', lat: 27.472, lng: 94.912, localName: 'ডিব্ৰুগড়' },
+  { name: 'Silchar, Assam', state: 'Assam', lat: 24.833, lng: 92.778, localName: 'শিলচৰ' },
+  { name: 'Haflong, Assam', state: 'Assam', lat: 25.169, lng: 93.014, localName: 'হাফলং' },
   { name: 'Shillong, Meghalaya', state: 'Meghalaya', lat: 25.578, lng: 91.893, localName: 'Shillong' },
+  { name: 'Sohra (Cherrapunji), Meghalaya', state: 'Meghalaya', lat: 25.27, lng: 91.73, localName: 'Sohra' },
+  { name: 'Tura, Meghalaya', state: 'Meghalaya', lat: 25.519, lng: 90.22, localName: 'Tura' },
   { name: 'Kohima, Nagaland', state: 'Nagaland', lat: 25.675, lng: 94.108, localName: 'Kohima' },
+  { name: 'Dimapur, Nagaland', state: 'Nagaland', lat: 25.909, lng: 93.727, localName: 'Dimapur' },
   { name: 'Imphal, Manipur', state: 'Manipur', lat: 24.817, lng: 93.936, localName: 'Imphal' },
-  { name: 'Leh, Ladakh', state: 'Ladakh', lat: 34.152, lng: 77.577, localName: 'लेह' },
+  { name: 'Churachandpur, Manipur', state: 'Manipur', lat: 24.327, lng: 93.686, localName: 'Churachandpur' },
+  { name: 'Aizawl, Mizoram', state: 'Mizoram', lat: 23.727, lng: 92.718, localName: 'Aizawl' },
+  { name: 'Agartala, Tripura', state: 'Tripura', lat: 23.831, lng: 91.286, localName: 'অগৰতলা' },
 ] as const
 
 export const LANGUAGES = [
@@ -102,7 +130,8 @@ export type LanguageCode = typeof LANGUAGES[number]['code']
 
 // Map projection helper: project lat/lng to x/y percentages within a bounding box.
 // Bounds cover northern Himalayan / NE region.
-export const MAP_BOUNDS = { minLat: 23, maxLat: 35, minLng: 76, maxLng: 96 }
+// Bounds cover North East India only (per user focus)
+export const MAP_BOUNDS = { minLat: 21, maxLat: 29, minLng: 88, maxLng: 97 }
 
 export function projectLatLng(lat: number, lng: number, bounds = MAP_BOUNDS) {
   const x = ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100

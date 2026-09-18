@@ -1,0 +1,602 @@
+   600→              {INCIDENT_STATUSES.map((s) => (
+   601→                <SelectItem key={s} value={s}>{s}</SelectItem>
+   602→              ))}
+   603→            </SelectContent>
+   604→          </Select>
+   605→          <Select value={priority} onValueChange={setPriority}>
+   606→            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
+   607→            <SelectContent>
+   608→              <SelectItem value="ALL">All priorities</SelectItem>
+   609→              {INCIDENT_PRIORITIES.map((p) => (
+   610→                <SelectItem key={p} value={p}>{p}</SelectItem>
+   611→              ))}
+   612→            </SelectContent>
+   613→          </Select>
+   614→          <Select value={type} onValueChange={setType}>
+   615→            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
+   616→            <SelectContent>
+   617→              <SelectItem value="ALL">All types</SelectItem>
+   618→              {INCIDENT_TYPES.map((t) => (
+   619→                <SelectItem key={t} value={t}>{t}</SelectItem>
+   620→              ))}
+   621→            </SelectContent>
+   622→          </Select>
+   623→          <div className="relative">
+   624→            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+   625→            <Input
+   626→              className="h-8 pl-8 text-xs"
+   627→              placeholder="Search code / description…"
+   628→              value={search}
+   629→              onChange={(e) => setSearch(e.target.value)}
+   630→            />
+   631→          </div>
+   632→        </div>
+   633→
+   634→        <div className="rounded-md border max-h-[60vh] overflow-y-auto scrollbar-thin">
+   635→          <Table>
+   636→            <TableHeader className="sticky top-0 bg-background z-10">
+   637→              <TableRow>
+   638→                <TableHead className="text-xs">Code</TableHead>
+   639→                <TableHead className="text-xs">Type</TableHead>
+   640→                <TableHead className="text-xs">Priority</TableHead>
+   641→                <TableHead className="text-xs">Status</TableHead>
+   642→                <TableHead className="text-xs">Description</TableHead>
+   643→                <TableHead className="text-xs">Events</TableHead>
+   644→                <TableHead className="text-xs">Assign.</TableHead>
+   645→                <TableHead className="text-xs">Created</TableHead>
+   646→                <TableHead className="text-xs"></TableHead>
+   647→              </TableRow>
+   648→            </TableHeader>
+   649→            <TableBody>
+   650→              {loading && (
+   651→                <TableRow>
+   652→                  <TableCell colSpan={9} className="py-6 text-center text-muted-foreground text-xs">
+   653→                    Loading…
+   654→                  </TableCell>
+   655→                </TableRow>
+   656→              )}
+   657→              {!loading && filtered.length === 0 && (
+   658→                <TableRow>
+   659→                  <TableCell colSpan={9} className="py-6 text-center text-muted-foreground text-xs">
+   660→                    No incidents match the current filters
+   661→                  </TableCell>
+   662→                </TableRow>
+   663→              )}
+   664→              {!loading && filtered.map((i) => (
+   665→                <TableRow key={i.id} className="cursor-pointer hover:bg-muted/40" onClick={() => onOpenIncident(i.id)}>
+   666→                  <TableCell className="font-mono text-[11px]">{i.incidentCode}</TableCell>
+   667→                  <TableCell className="text-xs">{i.incidentType}</TableCell>
+   668→                  <TableCell>
+   669→                    <Badge variant="outline" className={cn(
+   670→                      'text-[10px] font-semibold',
+   671→                      i.priority === 'CRITICAL'
+   672→                        ? 'border-red-300 bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+   673→                        : i.priority === 'HIGH'
+   674→                        ? 'border-orange-300 bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'
+   675→                        : i.priority === 'NORMAL'
+   676→                        ? 'border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+   677→                        : 'border-slate-200 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+   678→                    )}>{i.priority}</Badge>
+   679→                  </TableCell>
+   680→                  <TableCell><StatusBadge status={i.status} /></TableCell>
+   681→                  <TableCell className="text-xs max-w-[280px] truncate">{i.description}</TableCell>
+   682→                  <TableCell className="text-xs tabular-nums">{i.eventsCount}</TableCell>
+   683→                  <TableCell className="text-xs tabular-nums">{i.assignmentsCount}</TableCell>
+   684→                  <TableCell className="text-xs">{formatRelativeTime(i.createdAt)}</TableCell>
+   685→                  <TableCell>
+   686→                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onOpenIncident(i.id) }}>
+   687→                      Open <ExternalLink className="h-3 w-3" />
+   688→                    </Button>
+   689→                  </TableCell>
+   690→                </TableRow>
+   691→              ))}
+   692→            </TableBody>
+   693→          </Table>
+   694→        </div>
+   695→        <p className="text-[11px] text-muted-foreground">
+   696→          Tip: row click opens the incident Sheet for full timeline + status controls.
+   697→        </p>
+   698→      </CardContent>
+   699→    </Card>
+   700→  )
+   701→}
+   702→
+   703→// ─── Incident Sheet ─────────────────────────────────────────────────
+   704→function IncidentSheet({
+   705→  incidentId, open, onOpenChange, onChanged,
+   706→}: {
+   707→  incidentId: string | null
+   708→  open: boolean
+   709→  onOpenChange: (v: boolean) => void
+   710→  onChanged: () => void
+   711→}) {
+   712→  const [incident, setIncident] = React.useState<IncidentDetail | null>(null)
+   713→  const [volunteers, setVolunteers] = React.useState<any[]>([])
+   714→  const [loading, setLoading] = React.useState(false)
+   715→  const [newStatus, setNewStatus] = React.useState<string>('')
+   716→  const [newPriority, setNewPriority] = React.useState<string>('')
+   717→  const [assignVolunteer, setAssignVolunteer] = React.useState<string>('')
+   718→  const [note, setNote] = React.useState('')
+   719→  const [saving, setSaving] = React.useState(false)
+   720→
+   721→  const load = React.useCallback(async () => {
+   722→    if (!incidentId) return
+   723→    setLoading(true)
+   724→    try {
+   725→      const [inc, vols] = await Promise.all([
+   726→        apiGet<{ incident: IncidentDetail }>(`/api/ops/incidents/${incidentId}`),
+   727→        apiGet<{ items: any[] }>(`/api/admin/volunteers`),
+   728→      ])
+   729→      setIncident(inc.incident)
+   730→      setVolunteers(vols.items ?? [])
+   731→      setNewStatus(inc.incident.status)
+   732→      setNewPriority(inc.incident.priority)
+   733→      setNote('')
+   734→    } catch (e) {
+   735→      toast.error('Failed to load incident', { description: String(e) })
+   736→    } finally {
+   737→      setLoading(false)
+   738→    }
+   739→  }, [incidentId])
+   740→
+   741→  React.useEffect(() => {
+   742→    if (open && incidentId) load()
+   743→  }, [open, incidentId, load])
+   744→
+   745→  async function handleUpdate() {
+   746→    if (!incident) return
+   747→    setSaving(true)
+   748→    try {
+   749→      const body: any = {}
+   750→      if (newStatus && newStatus !== incident.status) body.status = newStatus
+   751→      if (newPriority && newPriority !== incident.priority) body.priority = newPriority
+   752→      if (note) body.note = note
+   753→      if (Object.keys(body).length === 0) {
+   754→        toast.info('No changes to apply')
+   755→        return
+   756→      }
+   757→      const res = await apiPatch<{ incident: IncidentDetail }>(`/api/ops/incidents/${incident.id}`, body)
+   758→      setIncident(res.incident)
+   759→      toast.success('Incident updated', { description: 'Status change + note written to timeline. Action logged.' })
+   760→      setNote('')
+   761→      onChanged()
+   762→    } catch (e) {
+   763→      toast.error('Update failed', { description: String(e) })
+   764→    } finally {
+   765→      setSaving(false)
+   766→    }
+   767→  }
+   768→
+   769→  async function handleAssign() {
+   770→    if (!incident || !assignVolunteer) return
+   771→    setSaving(true)
+   772→    try {
+   773→      const v = volunteers.find((x) => x.id === assignVolunteer)
+   774→      const teamId = v?.user?.name ? `volunteer:${v.user.name}` : `volunteer:${assignVolunteer}`
+   775→      const res = await apiPatch<{ incident: IncidentDetail }>(`/api/ops/incidents/${incident.id}`, {
+   776→        assignedTeamId: teamId,
+   777→        note: `Assigned to volunteer: ${v?.user?.name ?? assignVolunteer}`,
+   778→      })
+   779→      setIncident(res.incident)
+   780→      setAssignVolunteer('')
+   781→      toast.success('Volunteer assigned', { description: 'Assignment recorded. Action logged.' })
+   782→      onChanged()
+   783→    } catch (e) {
+   784→      toast.error('Assignment failed', { description: String(e) })
+   785→    } finally {
+   786→      setSaving(false)
+   787→    }
+   788→  }
+   789→
+   790→  return (
+   791→    <Sheet open={open} onOpenChange={onOpenChange}>
+   792→      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto scrollbar-thin">
+   793→        <SheetHeader>
+   794→          <SheetTitle className="flex items-center gap-2">
+   795→            <Siren className="h-4 w-4" />
+   796→            {incident?.incidentCode ?? 'Incident'}
+   797→            {incident?.simulationMode && <SimulationBadge className="ml-2" />}
+   798→          </SheetTitle>
+   799→          <SheetDescription>
+   800→            Full incident timeline, assignments and delivery receipts.
+   801→          </SheetDescription>
+   802→        </SheetHeader>
+   803→        {loading && (
+   804→          <div className="px-4 py-6 space-y-2">
+   805→            <Skeleton className="h-5 w-full" />
+   806→            <Skeleton className="h-5 w-2/3" />
+   807→            <Skeleton className="h-32 w-full" />
+   808→          </div>
+   809→        )}
+   810→        {!loading && incident && (
+   811→          <div className="px-4 pb-6 space-y-4">
+   812→            <div className="grid grid-cols-2 gap-2 text-xs">
+   813→              <div>
+   814→                <span className="text-muted-foreground">Type</span>
+   815→                <div className="font-medium">{incident.incidentType}</div>
+   816→              </div>
+   817→              <div>
+   818→                <span className="text-muted-foreground">Priority</span>
+   819→                <div><Badge variant="outline" className="text-[10px]">{incident.priority}</Badge></div>
+   820→              </div>
+   821→              <div>
+   822→                <span className="text-muted-foreground">Status</span>
+   823→                <div><StatusBadge status={incident.status} /></div>
+   824→              </div>
+   825→              <div>
+   826→                <span className="text-muted-foreground">Verification</span>
+   827→                <div><VerificationBadge status={incident.verificationStatus} /></div>
+   828→              </div>
+   829→              <div>
+   830→                <span className="text-muted-foreground">Location</span>
+   831→                <div className="font-mono">{incident.lat.toFixed(4)}, {incident.lng.toFixed(4)}</div>
+   832→                <div className="text-[10px] text-muted-foreground">{incident.locationKind} · {incident.locationAccuracyM ?? '—'}m</div>
+   833→              </div>
+   834→              <div>
+   835→                <span className="text-muted-foreground">Created</span>
+   836→                <div>{formatRelativeTime(incident.createdAt)}</div>
+   837→              </div>
+   838→            </div>
+   839→
+   840→            <div>
+   841→              <span className="text-xs font-medium">Description</span>
+   842→              <p className="text-sm mt-1">{incident.description}</p>
+   843→            </div>
+   844→
+   845→            {/* Status update controls */}
+   846→            <Card className="py-3">
+   847→              <CardHeader className="pb-2 px-4">
+   848→                <CardTitle className="text-xs">Update status / priority</CardTitle>
+   849→              </CardHeader>
+   850→              <CardContent className="px-4 space-y-2">
+   851→                <div className="grid grid-cols-2 gap-2">
+   852→                  <div>
+   853→                    <Label className="text-xs">Status</Label>
+   854→                    <Select value={newStatus} onValueChange={setNewStatus}>
+   855→                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+   856→                      <SelectContent>
+   857→                        {INCIDENT_STATUSES.map((s) => (
+   858→                          <SelectItem key={s} value={s}>{s}</SelectItem>
+   859→                        ))}
+   860→                      </SelectContent>
+   861→                    </Select>
+   862→                  </div>
+   863→                  <div>
+   864→                    <Label className="text-xs">Priority</Label>
+   865→                    <Select value={newPriority} onValueChange={setNewPriority}>
+   866→                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+   867→                      <SelectContent>
+   868→                        {INCIDENT_PRIORITIES.map((p) => (
+   869→                          <SelectItem key={p} value={p}>{p}</SelectItem>
+   870→                        ))}
+   871→                      </SelectContent>
+   872→                    </Select>
+   873→                  </div>
+   874→                </div>
+   875→                <div>
+   876→                  <Label className="text-xs">Note (added to timeline)</Label>
+   877→                  <Textarea
+   878→                    className="text-xs min-h-12"
+   879→                    placeholder="Optional note for the audit trail…"
+   880→                    value={note}
+   881→                    onChange={(e) => setNote(e.target.value)}
+   882→                  />
+   883→                </div>
+   884→                <Button size="sm" className="h-8 w-full" onClick={handleUpdate} disabled={saving}>
+   885→                  <Save className="h-3.5 w-3.5" /> Update incident
+   886→                </Button>
+   887→                <p className="text-[10px] text-muted-foreground">
+   888→                  Audit note: status transitions are validated against the incident lifecycle.
+   889→                  Each update writes an IncidentEvent and an AuditLog entry.
+   890→                </p>
+   891→              </CardContent>
+   892→            </Card>
+   893→
+   894→            {/* Assign to volunteer */}
+   895→            <Card className="py-3">
+   896→              <CardHeader className="pb-2 px-4">
+   897→                <CardTitle className="text-xs">Assign to volunteer</CardTitle>
+   898→              </CardHeader>
+   899→              <CardContent className="px-4 space-y-2">
+   900→                <div className="flex gap-2">
+   901→                  <Select value={assignVolunteer} onValueChange={setAssignVolunteer}>
+   902→                    <SelectTrigger className="h-8 text-xs flex-1">
+   903→                      <SelectValue placeholder="Select a verified volunteer…" />
+   904→                    </SelectTrigger>
+   905→                    <SelectContent>
+   906→                      {volunteers.filter((v) => v.verificationStatus === 'VERIFIED').map((v) => (
+   907→                        <SelectItem key={v.id} value={v.id}>
+   908→                          {v.user?.name ?? 'Volunteer'} · {v.skills?.split(',')[0] ?? 'general'}
+   909→                        </SelectItem>
+   910→                      ))}
+   911→                    </SelectContent>
+   912→                  </Select>
+   913→                  <Button size="sm" variant="outline" className="h-8" onClick={handleAssign} disabled={saving || !assignVolunteer}>
+   914→                    Assign
+   915→                  </Button>
+   916→                </div>
+   917→                {incident.assignments.length > 0 && (
+   918→                  <div className="text-xs space-y-1">
+   919→                    {incident.assignments.map((a) => (
+   920→                      <div key={a.id} className="flex items-center justify-between border rounded px-2 py-1">
+   921→                        <span>{a.volunteer?.name ?? 'Volunteer'}</span>
+   922→                        <Badge variant="outline" className="text-[10px]">{a.status}</Badge>
+   923→                      </div>
+   924→                    ))}
+   925→                  </div>
+   926→                )}
+   927→              </CardContent>
+   928→            </Card>
+   929→
+   930→            {/* Timeline */}
+   931→            <Card className="py-3">
+   932→              <CardHeader className="pb-2 px-4">
+   933→                <CardTitle className="text-xs">Timeline ({incident.events.length})</CardTitle>
+   934→              </CardHeader>
+   935→              <CardContent className="px-4">
+   936→                <div className="space-y-2 max-h-60 overflow-y-auto scrollbar-thin">
+   937→                  {incident.events.length === 0 && (
+   938→                    <p className="text-xs text-muted-foreground">No events recorded yet.</p>
+   939→                  )}
+   940→                  {incident.events.map((ev) => (
+   941→                    <div key={ev.id} className="border-l-2 border-primary/30 pl-2 py-1">
+   942→                      <div className="flex items-center gap-2">
+   943→                        <Badge variant="outline" className="text-[9px]">{ev.eventType}</Badge>
+   944→                        <span className="text-[10px] text-muted-foreground">{formatRelativeTime(ev.createdAt)}</span>
+   945→                      </div>
+   946→                      {ev.fromStatus && ev.toStatus && (
+   947→                        <p className="text-xs mt-0.5">
+   948→                          <span className="font-mono">{ev.fromStatus}</span> → <span className="font-mono">{ev.toStatus}</span>
+   949→                        </p>
+   950→                      )}
+   951→                      {ev.note && <p className="text-xs text-muted-foreground mt-0.5">{ev.note}</p>}
+   952→                    </div>
+   953→                  ))}
+   954→                </div>
+   955→              </CardContent>
+   956→            </Card>
+   957→
+   958→            {/* Deliveries */}
+   959→            {incident.deliveries.length > 0 && (
+   960→              <Card className="py-3">
+   961→                <CardHeader className="pb-2 px-4">
+   962→                  <CardTitle className="text-xs">Notification deliveries ({incident.deliveries.length})</CardTitle>
+   963→                </CardHeader>
+   964→                <CardContent className="px-4">
+   965→                  <div className="space-y-1">
+   966→                    {incident.deliveries.map((d) => (
+   967→                      <div key={d.id} className="flex items-center justify-between text-xs border rounded px-2 py-1">
+   968→                        <span className="font-mono text-[11px]">{d.recipient}</span>
+   969→                        <div className="flex items-center gap-2">
+   970→                          <Badge variant="outline" className="text-[9px]">{d.channel}</Badge>
+   971→                          <StatusBadge status={d.status} />
+   972→                          {d.simulationMode && <SimulationBadge className="text-[9px]" />}
+   973→                        </div>
+   974→                      </div>
+   975→                    ))}
+   976→                  </div>
+   977→                </CardContent>
+   978→              </Card>
+   979→            )}
+   980→          </div>
+   981→        )}
+   982→      </SheetContent>
+   983→    </Sheet>
+   984→  )
+   985→}
+   986→
+   987→// ─── Alert Authoring tab ────────────────────────────────────────────
+   988→function AlertAuthoringTab({
+   989→  location, refreshKey, onRefresh,
+   990→}: {
+   991→  location: { lat: number; lng: number; name: string }
+   992→  refreshKey: number
+   993→  onRefresh: () => void
+   994→}) {
+   995→  const [alerts, setAlerts] = React.useState<AlertListItem[]>([])
+   996→  const [loading, setLoading] = React.useState(true)
+   997→  const [draft, setDraft] = React.useState({
+   998→    alertType: 'LANDSLIDE',
+   999→    severity: 'ADVISORY',
+  1000→    title: '',
+  1001→    body: '',
+  1002→    lat: location.lat,
+  1003→    lng: location.lng,
+  1004→    radiusKm: 10,
+  1005→    validFrom: new Date().toISOString().slice(0, 16),
+  1006→    expiresAt: new Date(Date.now() + 6 * 3600000).toISOString().slice(0, 16),
+  1007→    languages: 'en,hi,ne,as',
+  1008→    simulationMode: true,
+  1009→  })
+  1010→  const [saving, setSaving] = React.useState(false)
+  1011→  const [previewId, setPreviewId] = React.useState<string | null>(null)
+  1012→  const previewAlert = alerts.find((a) => a.id === previewId) ?? null
+  1013→
+  1014→  const load = React.useCallback(async () => {
+  1015→    setLoading(true)
+  1016→    try {
+  1017→      const res = await apiGet<{ items: AlertListItem[] }>(`/api/ops/alerts`)
+  1018→      setAlerts(res.items ?? [])
+  1019→    } catch (e) {
+  1020→      toast.error('Failed to load alerts', { description: String(e) })
+  1021→    } finally {
+  1022→      setLoading(false)
+  1023→    }
+  1024→  }, [])
+  1025→
+  1026→  React.useEffect(() => {
+  1027→    load()
+  1028→  }, [load, refreshKey])
+  1029→
+  1030→  async function saveDraft() {
+  1031→    if (!draft.title || !draft.body) {
+  1032→      toast.error('Title and body are required')
+  1033→      return
+  1034→    }
+  1035→    setSaving(true)
+  1036→    try {
+  1037→      const payload = {
+  1038→        ...draft,
+  1039→        lat: Number(draft.lat),
+  1040→        lng: Number(draft.lng),
+  1041→        radiusKm: Number(draft.radiusKm),
+  1042→        validFrom: new Date(draft.validFrom).toISOString(),
+  1043→        expiresAt: new Date(draft.expiresAt).toISOString(),
+  1044→      }
+  1045→      await apiPost<{ alert: AlertListItem }>(`/api/ops/alerts`, payload)
+  1046→      toast.success('Draft saved', { description: 'Status: DRAFT · verification: PLATFORM. Action logged.' })
+  1047→      setDraft((d) => ({ ...d, title: '', body: '' }))
+  1048→      await load()
+  1049→      onRefresh()
+  1050→    } catch (e) {
+  1051→      toast.error('Failed to save draft', { description: String(e) })
+  1052→    } finally {
+  1053→      setSaving(false)
+  1054→    }
+  1055→  }
+  1056→
+  1057→  async function doAction(id: string, action: 'approve' | 'publish' | 'expire' | 'retract') {
+  1058→    try {
+  1059→      const res = await apiPatch<{ alert: AlertListItem; delivery: any }>(`/api/ops/alerts/${id}`, { action })
+  1060→      const label = action === 'publish'
+  1061→        ? `Status: ACTIVE · verification: ${res.alert.verificationStatus}. SIMULATED delivery receipts created.`
+  1062→        : `Status: ${res.alert.status}. Action logged.`
+  1063→      toast.success(`Alert ${action} applied`, { description: label })
+  1064→      await load()
+  1065→      onRefresh()
+  1066→    } catch (e) {
+  1067→      toast.error(`Failed to ${action} alert`, { description: String(e) })
+  1068→    }
+  1069→  }
+  1070→
+  1071→  return (
+  1072→    <div className="grid lg:grid-cols-2 gap-4">
+  1073→      {/* Left: draft form */}
+  1074→      <Card className="py-4">
+  1075→        <CardHeader className="pb-2">
+  1076→          <CardTitle className="text-sm flex items-center gap-2">
+  1077→            <FileText className="h-4 w-4" /> Draft alert
+  1078→          </CardTitle>
+  1079→          <CardDescription className="text-xs">
+  1080→            Drafts start in DRAFT / PLATFORM verification. Two-person approval recommended for EMERGENCY severity.
+  1081→          </CardDescription>
+  1082→        </CardHeader>
+  1083→        <CardContent className="space-y-3">
+  1084→          <div className="grid grid-cols-2 gap-2">
+  1085→            <div>
+  1086→              <Label className="text-xs">Alert type</Label>
+  1087→              <Select value={draft.alertType} onValueChange={(v) => setDraft((d) => ({ ...d, alertType: v }))}>
+  1088→                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  1089→                <SelectContent>
+  1090→                  {ALERT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+  1091→                </SelectContent>
+  1092→              </Select>
+  1093→            </div>
+  1094→            <div>
+  1095→              <Label className="text-xs">Severity</Label>
+  1096→              <Select value={draft.severity} onValueChange={(v) => setDraft((d) => ({ ...d, severity: v }))}>
+  1097→                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  1098→                <SelectContent>
+  1099→                  {SEVERITY_LEVELS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+  1100→                </SelectContent>
+  1101→              </Select>
+  1102→            </div>
+  1103→          </div>
+  1104→          <div>
+  1105→            <Label className="text-xs">Title</Label>
+  1106→            <Input className="h-8 text-xs" value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} placeholder="e.g. Landslide Watch — North Sikkim" />
+  1107→          </div>
+  1108→          <div>
+  1109→            <Label className="text-xs">Body / advisory text</Label>
+  1110→            <Textarea className="text-xs min-h-20" value={draft.body} onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))} placeholder="Plain-language advisory. Mention hazard, area, recommended action, validity." />
+  1111→          </div>
+  1112→          <div className="grid grid-cols-3 gap-2">
+  1113→            <div>
+  1114→              <Label className="text-xs">Lat</Label>
+  1115→              <Input className="h-8 text-xs" type="number" step="0.0001" value={draft.lat} onChange={(e) => setDraft((d) => ({ ...d, lat: Number(e.target.value) }))} />
+  1116→            </div>
+  1117→            <div>
+  1118→              <Label className="text-xs">Lng</Label>
+  1119→              <Input className="h-8 text-xs" type="number" step="0.0001" value={draft.lng} onChange={(e) => setDraft((d) => ({ ...d, lng: Number(e.target.value) }))} />
+  1120→            </div>
+  1121→            <div>
+  1122→              <Label className="text-xs">Radius (km)</Label>
+  1123→              <Input className="h-8 text-xs" type="number" step="1" value={draft.radiusKm} onChange={(e) => setDraft((d) => ({ ...d, radiusKm: Number(e.target.value) }))} />
+  1124→            </div>
+  1125→          </div>
+  1126→          <div className="grid grid-cols-2 gap-2">
+  1127→            <div>
+  1128→              <Label className="text-xs">Valid from</Label>
+  1129→              <Input className="h-8 text-xs" type="datetime-local" value={draft.validFrom} onChange={(e) => setDraft((d) => ({ ...d, validFrom: e.target.value }))} />
+  1130→            </div>
+  1131→            <div>
+  1132→              <Label className="text-xs">Expires at</Label>
+  1133→              <Input className="h-8 text-xs" type="datetime-local" value={draft.expiresAt} onChange={(e) => setDraft((d) => ({ ...d, expiresAt: e.target.value }))} />
+  1134→            </div>
+  1135→          </div>
+  1136→          <div>
+  1137→            <Label className="text-xs">Languages (comma-separated codes)</Label>
+  1138→            <Input className="h-8 text-xs" value={draft.languages} onChange={(e) => setDraft((d) => ({ ...d, languages: e.target.value }))} />
+  1139→          </div>
+  1140→          <div className="flex items-center justify-between">
+  1141→            <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+  1142→              Simulation mode: {draft.simulationMode ? 'ON' : 'OFF'}
+  1143→            </Badge>
+  1144→            <Button size="sm" onClick={saveDraft} disabled={saving}>
+  1145→              <Save className="h-3.5 w-3.5" /> Save draft
+  1146→            </Button>
+  1147→          </div>
+  1148→          <Alert className="text-xs">
+  1149→            <AlertTriangle className="h-3.5 w-3.5" />
+  1150→            <AlertTitle className="text-xs">Public advisories vs. authority-issued alerts</AlertTitle>
+  1151→            <AlertDescription className="text-xs">
+  1152→              Public advisories are distinguished from authority-issued alerts.
+  1153→              Two-person approval recommended for highest severity (EMERGENCY / WARNING).
+  1154→            </AlertDescription>
+  1155→          </Alert>
+  1156→        </CardContent>
+  1157→      </Card>
+  1158→
+  1159→      {/* Right: list */}
+  1160→      <Card className="py-4">
+  1161→        <CardHeader className="pb-2">
+  1162→          <div className="flex items-center justify-between">
+  1163→            <div>
+  1164→              <CardTitle className="text-sm flex items-center gap-2">
+  1165→                <BellRing className="h-4 w-4" /> Drafts & active alerts
+  1166→              </CardTitle>
+  1167→              <CardDescription className="text-xs">Approve → Publish → Expire / Retract lifecycle</CardDescription>
+  1168→            </div>
+  1169→            <Button size="sm" variant="outline" className="h-8" onClick={load} disabled={loading}>
+  1170→              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+  1171→            </Button>
+  1172→          </div>
+  1173→        </CardHeader>
+  1174→        <CardContent>
+  1175→          <div className="max-h-[60vh] overflow-y-auto scrollbar-thin space-y-2">
+  1176→            {alerts.length === 0 && !loading && (
+  1177→              <p className="text-xs text-muted-foreground text-center py-6">No alerts yet — draft one to begin.</p>
+  1178→            )}
+  1179→            {alerts.map((a) => (
+  1180→              <div key={a.id} className="border rounded-md p-2.5 space-y-2">
+  1181→                <div className="flex items-center justify-between gap-2 flex-wrap">
+  1182→                  <div className="flex items-center gap-1.5">
+  1183→                    <Badge variant="outline" className="text-[10px]">{a.alertType}</Badge>
+  1184→                    <SeverityBadge severity={a.severity as any} />
+  1185→                    <StatusBadge status={a.status} />
+  1186→                    <VerificationBadge status={a.verificationStatus} />
+  1187→                    {a.simulationMode && <SimulationBadge className="text-[9px]" />}
+  1188→                  </div>
+  1189→                  <span className="text-[10px] text-muted-foreground">
+  1190→                    Expires {formatRelativeTime(a.expiresAt)}
+  1191→                  </span>
+  1192→                </div>
+  1193→                <div>
+  1194→                  <div className="text-sm font-medium">{a.title}</div>
+  1195→                  <p className="text-xs text-muted-foreground line-clamp-2">{a.body}</p>
+  1196→                </div>
+  1197→                <div className="flex items-center gap-1.5 flex-wrap">
+  1198→                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPreviewId(a.id)}>
+  1199→                    <Eye className="h-3 w-3" /> Preview
+
+[showing lines 600-1199 of 1523; use offset=1200 with limit to continue reading]
