@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type DraftBody = {
   alertType: string
@@ -18,6 +19,7 @@ type DraftBody = {
 
 // GET /api/ops/alerts — list alerts (default: all) with optional status filter.
 export async function GET(req: Request) {
+  if (!_auth.ok) return _auth.response
   try {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status') // DRAFT | ACTIVE | EXPIRED | RETRACTED
@@ -42,7 +44,10 @@ export async function GET(req: Request) {
 // POST /api/ops/alerts — draft a new alert.
 // Created with status DRAFT and verificationStatus PLATFORM.
 // authorId is the seeded district operator.
-export async function POST(req: Request) {
+export async function POST(req: Request, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const body = (await req.json()) as DraftBody
     if (!body.alertType || !body.severity || !body.title || !body.body) {

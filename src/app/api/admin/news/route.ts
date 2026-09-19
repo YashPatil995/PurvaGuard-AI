@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type CreateBody = {
   title: string
@@ -15,7 +16,10 @@ type CreateBody = {
 }
 
 // GET /api/admin/news — list all NewsItem (incl. DRAFT).
-export async function GET() {
+export async function GET(request: Request) {
+  const _auth = await requireAdmin(request)
+  if (!_auth.ok) return _auth.response
+  if (!_auth.ok) return _auth.response
   try {
     const items = await db.newsItem.findMany({
       orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }],
@@ -35,7 +39,10 @@ export async function GET() {
 }
 
 // POST /api/admin/news — create NewsItem. authorId is the seeded admin.
-export async function POST(req: Request) {
+export async function POST(req: Request, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const body = (await req.json()) as CreateBody
     if (!body.title || !body.summary || !body.publisher || !body.sourceUrl) {

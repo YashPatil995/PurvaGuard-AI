@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type ActionBody = { action: 'approve' | 'publish' | 'expire' | 'retract' }
 
 // GET /api/ops/alerts/[id] — single alert with regions + deliveries.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  if (!_auth.ok) return _auth.response
   try {
     const { id } = await ctx.params
     const alert = await db.alert.findUnique({
@@ -32,7 +34,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 // PATCH /api/ops/alerts/[id] with body { action }.
 // approve/publish/expire/retract — transitions status, verificationStatus,
 // publishedAt and creates a NotificationDelivery on publish (simulated).
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const { id } = await ctx.params
     const body = (await req.json()) as ActionBody

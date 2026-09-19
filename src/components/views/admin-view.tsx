@@ -1410,13 +1410,15 @@ function SmsSection() {
   const [expandedLog, setExpandedLog] = React.useState<string | null>(null)
   const [newPhone, setNewPhone] = React.useState('')
   const [newName, setNewName] = React.useState('')
+  const [providerInfo, setProviderInfo] = React.useState<{ provider: string; configStatus: Record<string, string> } | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      const r = await apiGet<{ logs: SmsLog[]; recipients: SmsRecipient[] }>(`/api/sms`)
+      const r = await apiGet<{ logs: SmsLog[]; recipients: SmsRecipient[]; provider: string; configStatus: Record<string, string> }>(`/api/sms`)
       setLogs(r.logs ?? [])
       setRecipients(r.recipients ?? [])
+      setProviderInfo({ provider: r.provider, configStatus: r.configStatus ?? {} })
     } catch (e) {
       toast.error('Failed to load SMS data', { description: String(e) })
     } finally {
@@ -1431,23 +1433,28 @@ function SmsSection() {
       toast.error('Message is empty')
       return
     }
-    if (message.length > 160) {
-      toast.error('Message exceeds 160-character SMS limit', { description: `Trim ${message.length - 160} characters.` })
+    if (message.length > 480) {
+      toast.error('Message exceeds 480-character limit', { description: `Trim ${message.length - 480} characters.` })
       return
     }
     setSending(true)
     setLastResult(null)
     try {
-      const r = await apiPost<{ success: boolean; sent: number; quotaExceeded: number; failed: number; total: number; results: any[]; note?: string }>(`/api/sms`, { message })
+      const r = await apiPost<{ success: boolean; sent: number; quotaExceeded: number; failed: number; rejected: number; unconfigured: number; total: number; provider: string; results: any[]; note?: string }>(`/api/sms`, { message })
       setLastResult(r)
       if (r.sent > 0) {
-        toast.success(`SMS sent to ${r.sent} recipient${r.sent === 1 ? '' : 's'}`, {
+        toast.success(`SMS sent to ${r.sent} recipient${r.sent === 1 ? '' : 's'} via ${r.provider}`, {
           description: r.note ?? `${r.quotaExceeded} quota-exceeded, ${r.failed} failed.`,
           duration: 6000,
         })
+      } else if (r.unconfigured > 0) {
+        toast.warning(`Provider '${r.provider}' not configured`, {
+          description: r.note ?? `Set the API key in Settings → SMS provider.`,
+          duration: 8000,
+        })
       } else {
         toast.warning('No SMS delivered', {
-          description: r.note ?? `${r.quotaExceeded} quota-exceeded, ${r.failed} failed. Free tier allows 1 SMS/day per IP.`,
+          description: r.note ?? `${r.quotaExceeded} quota-exceeded, ${r.failed} failed, ${r.rejected} rejected.`,
           duration: 8000,
         })
       }
@@ -1474,18 +1481,27 @@ function SmsSection() {
 
   return (
     <div className="space-y-4">
-      {/* Honest TextBelt note */}
+      {/* Provider status note */}
       <Card className="py-4 border-amber-300/60 bg-amber-50/50 dark:bg-amber-950/20">
         <CardContent className="flex items-start gap-3">
           <Info className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs">
-            <div className="font-semibold text-amber-800 dark:text-amber-300">SMS sent via TextBelt free API</div>
+            <div className="font-semibold text-amber-800 dark:text-amber-300">SMS Provider: {providerInfo?.provider || 'test'} mode</div>
             <p className="text-amber-700/90 dark:text-amber-200/80 mt-0.5">
-              First send of the day to each phone succeeds; subsequent attempts the same day return{' '}
-              <span className="font-mono">QUOTA_EXCEEDED</span>. To deliver to all recipients reliably, configure a
-              paid TextBelt key (or another provider) in <span className="font-semibold">Settings → sms.provider</span>.
-              Every attempt — success, quota, or failure — is logged honestly with the actual provider response.
+              {providerInfo?.provider === 'test' && 'Test mode — sends are simulated (no real SMS). Switch to a real provider in Settings → SMS provider to deliver actual messages.'}
+              {providerInfo?.provider === 'textbelt' && 'TextBelt free tier: India numbers are currently blocked on the free key. Add a paid TextBelt key in Settings for real India delivery.'}
+              {providerInfo?.provider === 'twilio' && (providerInfo?.configStatus?.twilio?.includes('not configured') ? 'Twilio not configured — add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER in Settings.' : 'Twilio configured — trial accounts can only send to verified numbers.')}
+              {providerInfo?.provider === 'fast2sms' && (providerInfo?.configStatus?.fast2sms?.includes('not configured') ? 'Fast2SMS not configured — add FAST2SMS_API_KEY in Settings.' : 'Fast2SMS configured — sends to India numbers.')}
+              {providerInfo?.provider === 'msg91' && (providerInfo?.configStatus?.msg91?.includes('not configured') ? 'MSG91 not configured — add MSG91_AUTH_KEY in Settings.' : 'MSG91 configured — sends to India numbers.')}
+              {' '}Every attempt — success, quota, or failure — is logged honestly with the actual provider response.
             </p>
+            {providerInfo && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {Object.entries(providerInfo.configStatus).map(([k, v]) => (
+                  <Badge key={k} variant="outline" className="text-[9px] font-mono">{k}: {v}</Badge>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1495,7 +1511,7 @@ function SmsSection() {
         <KpiCard icon={Users} label="Active recipients" value={recipients.filter((r) => r.active).length} hint={`of ${recipients.length} total`} />
         <KpiCard icon={Send} label="SMS sent today" value={sentToday} tone="info" />
         <KpiCard icon={Inbox} label="Total logged" value={logs.length} />
-        <KpiCard icon={Activity} label="Provider" value="TextBelt" hint="free tier" />
+        <KpiCard icon={Activity} label="Provider" value={providerInfo?.provider || 'test'} hint="mode" />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
@@ -1571,7 +1587,7 @@ function SmsSection() {
                 onChange={(e) => setMessage(e.target.value)}
               />
             </div>
-            <Button onClick={sendAll} disabled={sending || message.length > 160 || !message.trim()}>
+            <Button onClick={sendAll} disabled={sending || message.length > 480 || !message.trim()}>
               {sending ? <><RefreshCw className="h-4 w-4 animate-spin" /> Sending…</> : <><Send className="h-4 w-4" /> Send to all {recipients.filter((r) => r.active).length} recipients</>}
             </Button>
 
@@ -2668,7 +2684,7 @@ function SettingsSection() {
       'demo.simulationMode': 'true',
       'map.defaultExtent': JSON.stringify({ minLat: 21, maxLat: 29, minLng: 88, maxLng: 97 }),
       'sms.defaultMessage': DEFAULT_SMS_TEMPLATE,
-      'sms.provider': 'textbelt',
+      'sms.provider': 'test',
     }
     try {
       await apiPatch('/api/admin/settings', { key, value: defaults[key] ?? '' })
@@ -2846,6 +2862,17 @@ export default function AdminView() {
                 className="flex items-center gap-1 hover:text-foreground transition-colors mt-1"
               >
                 <ExternalLink className="h-3 w-3" /> Back to public site
+              </button>
+              <button
+                onClick={async () => {
+                  try { await apiPost('/api/auth/admin-logout', {}) } catch {}
+                  toast.success('Admin session ended')
+                  setView('home')
+                  setTimeout(() => window.location.reload(), 500)
+                }}
+                className="flex items-center gap-1 hover:text-red-600 dark:hover:text-red-400 transition-colors mt-1"
+              >
+                <ExternalLink className="h-3 w-3" /> Lock admin (logout)
               </button>
             </div>
           </CardContent>

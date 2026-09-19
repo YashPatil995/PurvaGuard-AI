@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type PatchBody = { key: string; value: string }
 
 // GET /api/admin/settings — list system settings.
-export async function GET() {
+export async function GET(request: Request) {
+  const _auth = await requireAdmin(request)
+  if (!_auth.ok) return _auth.response
+  if (!_auth.ok) return _auth.response
   try {
     const settings = await db.systemSetting.findMany({
       orderBy: { key: 'asc' },
@@ -22,7 +26,10 @@ export async function GET() {
 
 // PATCH /api/admin/settings — upsert a system setting (by key).
 // Body: { key, value }. Both are strings — value is opaque JSON stored as text.
-export async function PATCH(req: Request) {
+export async function PATCH(req: Request, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const body = (await req.json()) as PatchBody
     if (!body.key || body.value === undefined) {

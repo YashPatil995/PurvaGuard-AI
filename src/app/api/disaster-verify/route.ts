@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { loadSmsConfig, sendSms } from '@/lib/sms'
+import { DEFAULT_SMS_RECIPIENTS } from '@/lib/constants'
 
 // Disaster verification pipeline:
 // 1. Takes a community report / SOS text
@@ -58,23 +60,51 @@ Be conservative — only mark isRealDisaster=true for clear disaster signals. Re
   }
 }
 
-// Send SMS via the SMS API
+// Send SMS directly via the lib (server-side, no HTTP round-trip / no auth needed).
 async function triggerSms(message: string, alertId?: string, verificationId?: string) {
   try {
-    const baseUrl = process.env.NODE_ENV === 'production' ? 'http://localhost:3000' : 'http://localhost:3000'
-    const res = await fetch(`${baseUrl}/api/sms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, alertId, verificationId }),
-    })
-    return await res.json()
-  } catch {
-    return { success: false, error: 'SMS trigger failed' }
+    const config = await loadSmsConfig()
+    const recipients = await db.smsRecipient.findMany({ where: { active: true } })
+    const list = recipients.length > 0
+      ? recipients.map((r) => ({ phone: r.phone, name: r.name ?? undefined }))
+      : DEFAULT_SMS_RECIPIENTS.map((r) => ({ phone: r.phone, name: r.name }))
+    const results = await Promise.all(
+      list.map(async (r) => {
+        const result = await sendSms(r.phone, message, config)
+        await db.smsLog.create({
+          data: {
+            phone: r.phone,
+            message,
+            status: result.status,
+            provider: config.provider,
+            providerResponse: result.providerResponse,
+            alertId,
+            verificationId,
+            simulationMode: config.provider === 'test',
+            deliveredAt: result.success ? new Date() : null,
+          },
+        })
+        return { phone: r.phone, status: result.status, success: result.success }
+      })
+    )
+    return {
+      success: results.some((r) => r.success),
+      sent: results.filter((r) => r.status === 'SENT').length,
+      quotaExceeded: results.filter((r) => r.status === 'QUOTA_EXCEEDED').length,
+      rejected: results.filter((r) => r.status === 'REJECTED').length,
+      failed: results.filter((r) => r.status === 'FAILED').length,
+      total: results.length,
+      provider: config.provider,
+    }
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? 'SMS trigger failed', sent: 0, total: 6 }
   }
 }
 
 // POST /api/disaster-verify
 // Body: { text, language, reportId?, incidentId?, lat?, lng? }
+// PUBLIC — anyone submitting a hazard report can trigger AI verification.
+// SMS auto-sends only if the AI verifies HIGH/CRITICAL severity.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

@@ -5,11 +5,16 @@ import { io } from 'socket.io-client'
 import {
   Home, Map, Activity, BellRing, Siren, ShieldCheck, Megaphone, BookOpen,
   Newspaper, Bot, LayoutDashboard, BrainCircuit, Menu, X, Sun, Moon, Wifi, WifiOff,
-  Globe, Mountain, Accessibility, AlertTriangle, ChevronDown, Search, Heart, Users, Volume2,
+  Globe, Mountain, Accessibility, AlertTriangle, ChevronDown, Search, Heart, Users, Eye, EyeOff, Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -20,6 +25,8 @@ import { NAV_ITEMS, DEMO_REGIONS, LANGUAGES, type Role, type ViewId } from '@/li
 import { useTheme } from '@/components/theme-provider'
 import { I18nProvider, useT } from '@/lib/use-i18n'
 import { FloatingBot } from '@/components/floating-bot'
+import { FloatingHazardReport } from '@/components/floating-hazard-report'
+import { apiPost, apiGet } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { Toaster as SonnerToaster, toast } from 'sonner'
 
@@ -37,7 +44,9 @@ const ROLES: { id: Role; label: string; desc: string }[] = [
   { id: 'ANALYST', label: 'AI / Data Analyst', desc: 'Model & data quality' },
 ]
 
-// Live viewer count via socket.io mini-service
+// Public nav items only — admin is hidden (8-click logo to access)
+const PUBLIC_NAV = NAV_ITEMS.filter((i) => i.group === 'public')
+
 function useLiveViewerCount() {
   const [count, setCount] = React.useState(1)
   const [connected, setConnected] = React.useState(false)
@@ -53,36 +62,78 @@ function useLiveViewerCount() {
       })
       socket.on('connect', () => setConnected(true))
       socket.on('disconnect', () => setConnected(false))
-      socket.on('viewer-count', (data: { count: number }) => {
-        setCount(data.count)
-      })
+      socket.on('viewer-count', (data: { count: number }) => setCount(data.count))
       socket.on('connect_error', () => setConnected(false))
     } catch {
       setConnected(false)
     }
-    return () => {
-      try { socket?.disconnect() } catch {}
-    }
+    return () => { try { socket?.disconnect() } catch {} }
   }, [])
 
   return { count, connected }
 }
 
-function Header() {
+// Admin auth state
+function useAdminAuth() {
+  const [authed, setAuthed] = React.useState(false)
+  const [checking, setChecking] = React.useState(true)
+
+  const check = React.useCallback(async () => {
+    setChecking(true)
+    try {
+      const res = await apiGet<{ authenticated: boolean }>('/api/auth/admin-check')
+      setAuthed(res.authenticated)
+    } catch {
+      setAuthed(false)
+    } finally {
+      setChecking(false)
+    }
+  }, [])
+
+  React.useEffect(() => { check() }, [check])
+
+  return { authed, checking, refresh: check, setAuthed }
+}
+
+// 8-click logo handler → reveal password dialog
+const ADMIN_CLICK_COUNT = 8
+const ADMIN_CLICK_RESET_MS = 1500
+
+function Header({ onAdminAccess }: { onAdminAccess: () => void }) {
   const { role, setRole, view, setView, location, setLocation, language, setLanguage, connectivity } = useApp()
   const { theme, toggleTheme } = useTheme()
   const { t } = useT()
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false)
+  const clickCount = React.useRef(0)
+  const clickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const navItems = NAV_ITEMS.filter((i) => i.roles.includes(role))
+  const navItems = PUBLIC_NAV
+
+  const handleLogoClick = () => {
+    clickCount.current += 1
+    if (clickTimer.current) clearTimeout(clickTimer.current)
+    clickTimer.current = setTimeout(() => {
+      clickCount.current = 0
+    }, ADMIN_CLICK_RESET_MS)
+
+    if (clickCount.current >= ADMIN_CLICK_COUNT) {
+      clickCount.current = 0
+      onAdminAccess()
+      return
+    }
+    // Single click (first) → go home. Additional clicks accumulate.
+    if (clickCount.current === 1) {
+      setView('home')
+    }
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
       <div className="flex h-14 items-center gap-2 px-3 sm:px-4">
-        {/* Brand */}
+        {/* Brand — 8 clicks reveals admin login */}
         <button
-          onClick={() => setView('home')}
-          className="flex items-center gap-2 shrink-0 group"
+          onClick={handleLogoClick}
+          className="flex items-center gap-2 shrink-0 group select-none"
           aria-label="PurvaGuard AI home"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
@@ -121,7 +172,7 @@ function Header() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Desktop nav */}
+        {/* Desktop nav — PUBLIC only, no admin */}
         <nav className="hidden lg:flex items-center gap-0.5 ml-2 flex-1 overflow-x-auto scrollbar-thin">
           {navItems.map((item) => {
             const Icon = ICONS[item.icon] ?? Home
@@ -167,7 +218,7 @@ function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">{t('common.filter', 'Language')}</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Language</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {LANGUAGES.map((l) => (
                 <DropdownMenuItem key={l.code} onClick={() => { setLanguage(l.code); toast.success(`Language: ${l.label}`) }} className={cn(language === l.code && 'bg-muted')}>
@@ -181,17 +232,6 @@ function Header() {
           {/* Theme toggle */}
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-
-          {/* Prominent Admin Dashboard button */}
-          <Button
-            size="sm"
-            variant={view === 'admin' ? 'default' : 'outline'}
-            className="gap-1.5 font-semibold h-8 px-3"
-            onClick={() => setView('admin')}
-          >
-            <LayoutDashboard className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Admin</span>
           </Button>
 
           {/* SOS quick */}
@@ -385,7 +425,6 @@ function Footer() {
             <strong className="text-foreground/80">Disclaimer:</strong> {t('footer.disclaimer', 'Emergency numbers shown are demo placeholders. In a real emergency, contact your local authority directly.')}
           </p>
           <div className="flex items-center gap-3">
-            {/* Live viewer count — real, no dummy numbers */}
             <div className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1">
               <span className={cn('relative flex h-2 w-2', connected ? '' : 'opacity-40')}>
                 {connected && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
@@ -403,7 +442,6 @@ function Footer() {
   )
 }
 
-// Mobile bottom nav
 function MobileBottomNav() {
   const { view, setView } = useApp()
   const items: { id: ViewId; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
@@ -411,7 +449,7 @@ function MobileBottomNav() {
     { id: 'map', icon: Map, label: 'Map' },
     { id: 'sos', icon: Siren, label: 'SOS' },
     { id: 'alerts', icon: BellRing, label: 'Alerts' },
-    { id: 'admin', icon: LayoutDashboard, label: 'Admin' },
+    { id: 'prediction', icon: BrainCircuit, label: 'AI' },
   ]
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -443,7 +481,89 @@ function MobileBottomNav() {
   )
 }
 
-// Lazy-load view components (assistant → floating bot, operations → merged into admin)
+// Admin password dialog (8-click reveals it)
+function AdminLoginDialog({ open, onOpenChange, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; onSuccess: () => void }) {
+  const [password, setPassword] = React.useState('')
+  const [show, setShow] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const handleSubmit = async () => {
+    if (!password.trim()) { setError('Password is required'); return }
+    setLoading(true)
+    setError(null)
+    try {
+      await apiPost('/api/auth/admin-login', { password })
+      toast.success('Admin authenticated')
+      setPassword('')
+      onOpenChange(false)
+      onSuccess()
+    } catch (e: any) {
+      const msg = e?.message ?? 'Login failed'
+      if (msg.includes('429')) {
+        setError('Too many attempts. Try again in a few minutes.')
+      } else if (msg.includes('401')) {
+        setError('Invalid password. Try again.')
+      } else {
+        setError(msg)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Lock className="h-4 w-4" />
+            Admin Access
+          </DialogTitle>
+          <DialogDescription>
+            Enter the admin password to access the dashboard.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="admin-pass" className="text-xs">Password</Label>
+            <div className="relative">
+              <Input
+                id="admin-pass"
+                type={show ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                placeholder="Enter admin password"
+                className="pr-9"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShow(!show)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          <p className="text-[10px] text-muted-foreground">
+            Default password: <code className="rounded bg-muted px-1 py-0.5">purvaguard-admin-2026</code> (change after first login)
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading} className="gap-1.5">
+            {loading ? 'Verifying…' : 'Unlock'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Lazy-load view components
 const HomeView = React.lazy(() => import('@/components/views/home-view'))
 const MapView = React.lazy(() => import('@/components/views/map-view'))
 const RiskView = React.lazy(() => import('@/components/views/risk-view'))
@@ -468,8 +588,24 @@ function ViewLoader() {
   )
 }
 
-function ViewRouter() {
+function ViewRouter({ adminAuthed }: { adminAuthed: boolean }) {
   const { view } = useApp()
+
+  // Block admin view if not authed
+  if (view === 'admin' && !adminAuthed) {
+    return (
+      <div className="flex items-center justify-center py-32 px-4">
+        <div className="text-center space-y-3 max-w-md">
+          <Lock className="h-12 w-12 mx-auto text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Admin access required</h2>
+          <p className="text-sm text-muted-foreground">
+            Click the PurvaGuard AI logo 8 times to reveal the admin login prompt. All admin APIs are server-side protected.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const map: Partial<Record<ViewId, React.ComponentType>> = {
     home: HomeView,
     map: MapView,
@@ -493,19 +629,31 @@ function ViewRouter() {
 }
 
 export default function Page() {
+  const { setView } = useApp()
+  const [adminDialogOpen, setAdminDialogOpen] = React.useState(false)
+  const { authed: adminAuthed, refresh: refreshAdmin } = useAdminAuth()
+
   return (
     <I18nProvider>
       <div className="flex min-h-screen flex-col bg-background">
         <SonnerToaster position="top-right" richColors closeButton />
-        <Header />
+        <Header onAdminAccess={() => setAdminDialogOpen(true)} />
         <main className="flex-1 w-full">
-          <ViewRouter />
+          <ViewRouter adminAuthed={adminAuthed} />
         </main>
         <Footer />
         <MobileBottomNav />
-        {/* Floating AI bot — available on all views */}
+        {/* Floating AI bot */}
         <FloatingBot />
-        {/* spacer so content isn't hidden behind mobile bottom nav */}
+        {/* Floating hazard report button — on all pages */}
+        <FloatingHazardReport />
+        {/* Admin login dialog (revealed by 8 logo clicks) */}
+        <AdminLoginDialog
+          open={adminDialogOpen}
+          onOpenChange={setAdminDialogOpen}
+          onSuccess={() => { refreshAdmin(); setView('admin') }}
+        />
+        {/* spacer for mobile bottom nav */}
         <div className="lg:hidden h-14" aria-hidden />
       </div>
     </I18nProvider>

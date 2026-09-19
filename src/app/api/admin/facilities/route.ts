@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type CreateBody = {
   facilityType: string
@@ -19,7 +20,10 @@ type CreateBody = {
 }
 
 // GET /api/admin/facilities — list all facilities.
-export async function GET() {
+export async function GET(request: Request) {
+  const _auth = await requireAdmin(request)
+  if (!_auth.ok) return _auth.response
+  if (!_auth.ok) return _auth.response
   try {
     const items = await db.facility.findMany({
       orderBy: [{ status: 'asc' }, { name: 'asc' }],
@@ -38,7 +42,10 @@ export async function GET() {
 }
 
 // POST /api/admin/facilities — create a facility.
-export async function POST(req: Request) {
+export async function POST(req: Request, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const body = (await req.json()) as CreateBody
     if (!body.facilityType || !body.name || body.lat == null || body.lng == null) {

@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // GET /api/ops/incidents — list incidents with filters + events/assignments counts.
 export async function GET(req: Request) {
+  if (!_auth.ok) return _auth.response
   try {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status')

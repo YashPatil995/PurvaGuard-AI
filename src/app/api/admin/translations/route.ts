@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { DEFAULT_TRANSLATIONS } from '@/lib/i18n'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // GET /api/admin/translations?language=en
 // Returns all translation keys for the requested language, merging DB overrides
 // over the bundled defaults (so the admin always sees the full key set).
 export async function GET(request: NextRequest) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
   try {
     const { searchParams } = new URL(request.url)
     const language = searchParams.get('language') || 'en'
@@ -44,7 +47,10 @@ type PostBody = {
 
 // POST /api/admin/translations — upsert a Translation row keyed by (key, language).
 // Body: { key, language, value }.
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const body = (await req.json()) as PostBody
     if (!body.key || !body.language || typeof body.value !== 'string') {

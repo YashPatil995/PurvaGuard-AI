@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type PatchBody = {
   id: string
@@ -8,7 +9,10 @@ type PatchBody = {
 }
 
 // GET /api/admin/volunteers — list volunteer profiles.
-export async function GET() {
+export async function GET(request: Request) {
+  const _auth = await requireAdmin(request)
+  if (!_auth.ok) return _auth.response
+  if (!_auth.ok) return _auth.response
   try {
     const items = await db.volunteerProfile.findMany({
       orderBy: [{ verificationStatus: 'asc' }, { createdAt: 'desc' }],
@@ -27,7 +31,10 @@ export async function GET() {
 }
 
 // PATCH /api/admin/volunteers — approve or reject a volunteer profile.
-export async function PATCH(req: Request) {
+export async function PATCH(req: Request, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const body = (await req.json()) as PatchBody
     if (!body.id || !body.action) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type PatchBody = {
   title?: string
@@ -15,7 +16,10 @@ type PatchBody = {
 }
 
 // PATCH /api/admin/news/[id] — edit a NewsItem.
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const { id } = await ctx.params
     const body = (await req.json()) as PatchBody
@@ -59,7 +63,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 }
 
 // DELETE /api/admin/news/[id] — soft delete: set status ARCHIVED.
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const { id } = await ctx.params
     const before = await db.newsItem.findUnique({ where: { id } })

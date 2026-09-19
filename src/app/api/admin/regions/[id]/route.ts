@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type PatchBody = {
   localName?: string
@@ -9,7 +10,10 @@ type PatchBody = {
 }
 
 // PATCH /api/admin/regions/[id] — edit locality metadata.
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const { id } = await ctx.params
     const body = (await req.json()) as PatchBody

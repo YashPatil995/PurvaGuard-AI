@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // Allowed incident status transitions (used by PATCH).
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
@@ -24,6 +25,7 @@ type PatchBody = {
 
 // GET /api/ops/incidents/[id] — full incident detail.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  if (!_auth.ok) return _auth.response
   try {
     const { id } = await ctx.params
     const incident = await db.incident.findUnique({
@@ -60,7 +62,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 // Body: { status?, priority?, assignedTeamId?, note? }
 // Validates status transitions, appends IncidentEvent (STATUS_CHANGE or NOTE),
 // and creates an IncidentAssignment when assigning.
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const { id } = await ctx.params
     const body = (await req.json()) as PatchBody

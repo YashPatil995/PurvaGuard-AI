@@ -341,7 +341,8 @@ async function main() {
   await db.systemSetting.create({ data: { key: 'demo.simulationMode', value: JSON.stringify(true) } })
   await db.systemSetting.create({ data: { key: 'map.defaultExtent', value: JSON.stringify({ minLat: 21, maxLat: 29, minLng: 88, maxLng: 97 }) } })
   await db.systemSetting.create({ data: { key: 'sms.defaultMessage', value: JSON.stringify('DISASTER ALERT: {{hazard}} reported near {{location}}. {{action}} -PurvaGuard AI') } })
-  await db.systemSetting.create({ data: { key: 'sms.provider', value: JSON.stringify('textbelt-free') } })
+  await db.systemSetting.create({ data: { key: 'sms.provider', value: JSON.stringify('test') } })
+  await db.systemSetting.create({ data: { key: 'sms.textbeltKey', value: JSON.stringify('textbelt') } })
 
   console.log(`✅ Seed complete.`)
   console.log(`   NE regions: ${REGIONS.length}`)

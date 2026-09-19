@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getDemoActor, writeAudit, jsonSafe } from '@/lib/audit'
+import { requireAdmin } from '@/lib/admin-auth'
 
 type CreateBody = {
   canonicalName: string
@@ -16,7 +17,10 @@ type CreateBody = {
 }
 
 // GET /api/admin/regions — list all regions (hierarchical flat list).
-export async function GET() {
+export async function GET(request: Request) {
+  const _auth = await requireAdmin(request)
+  if (!_auth.ok) return _auth.response
+  if (!_auth.ok) return _auth.response
   try {
     const regions = await db.region.findMany({
       orderBy: [{ regionType: 'asc' }, { canonicalName: 'asc' }],
@@ -36,7 +40,10 @@ export async function GET() {
 }
 
 // POST /api/admin/regions — create a region.
-export async function POST(req: Request) {
+export async function POST(req: Request, request: Request) {
+  const _auth = await requireAdmin(request as any)
+  if (!_auth.ok) return _auth.response
+
   try {
     const body = (await req.json()) as CreateBody
     if (!body.canonicalName || !body.regionType || body.lat == null || body.lng == null) {
