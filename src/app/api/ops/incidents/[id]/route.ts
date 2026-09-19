@@ -25,6 +25,7 @@ type PatchBody = {
 
 // GET /api/ops/incidents/[id] — full incident detail.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const _auth = await requireAdmin(_req)
   if (!_auth.ok) return _auth.response
   try {
     const { id } = await ctx.params

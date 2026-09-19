@@ -650,3 +650,25 @@ Stage Summary:
 - Working SMS pipeline with multi-provider abstraction + honest delivery status. Test mode sends 6/6. Real providers (TextBelt/Twilio/Fast2SMS/MSG91) admin-configurable.
 - Hidden admin dashboard: 8-click logo → password → server-side auth → all admin/ops APIs protected.
 - All existing functionality preserved.
+
+---
+Task ID: FINAL-V4
+Agent: orchestrator
+Task: Fix admin Incidents & SOS 500 error + replace home map image with GPT-generated one
+
+Work Log:
+- Diagnosed: /api/ops/incidents GET returned 500 with "ReferenceError: _auth is not defined". Root cause: the guard script added `if (!_auth.ok) return _auth.response` but missed the `const _auth = await requireAdmin(...)` declaration in 11 files, and added duplicate guard lines in others.
+- Wrote scripts/fix-guards.ts to: (1) add missing `const _auth = await requireAdmin(<param>)` before each guard, (2) remove duplicate guard lines. Fixed 11 files: admin/settings, admin/volunteers, admin/regions, admin/facilities, admin/news, ops/incidents, ops/incidents/[id], ops/data-health, ops/alerts, ops/alerts/[id], ops/route, ops/alerts.
+- Replaced public/map-ne-india.png with user's GPT-generated map (2171x724, correct NE India state names).
+
+Agent Browser verification (all passed):
+- 8-click logo → password → admin dashboard loads.
+- Incidents & SOS section: incident queue now loads with PG-2026-008 (VERIFIED), PG-2026-007 (TRIAGED), filters, status badges. No 500 error.
+- All admin API routes return 200 (incidents, data-health, ops overview, admin/settings, admin/volunteers, admin/news, etc.).
+- Home page mini-map uses the new GPT-generated image (verified bg div with url('/map-ne-india.png')).
+- Lint clean. Dev log: no errors.
+
+Stage Summary:
+- Admin Incidents & SOS fixed (was 500, now loads incident queue with 8 incidents).
+- Home map replaced with GPT image (correct state names).
+- All 11 previously-broken admin API routes fixed.

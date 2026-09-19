@@ -19,6 +19,7 @@ type DraftBody = {
 
 // GET /api/ops/alerts — list alerts (default: all) with optional status filter.
 export async function GET(req: Request) {
+  const _auth = await requireAdmin(req)
   if (!_auth.ok) return _auth.response
   try {
     const { searchParams } = new URL(req.url)

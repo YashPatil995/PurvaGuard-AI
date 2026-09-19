@@ -20,7 +20,6 @@ type CreateBody = {
 export async function GET(request: Request) {
   const _auth = await requireAdmin(request)
   if (!_auth.ok) return _auth.response
-  if (!_auth.ok) return _auth.response
   try {
     const regions = await db.region.findMany({
       orderBy: [{ regionType: 'asc' }, { canonicalName: 'asc' }],
