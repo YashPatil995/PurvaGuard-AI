@@ -6,7 +6,6 @@ import { requireAdmin } from '@/lib/admin-auth'
 export async function GET(request: Request) {
   const _auth = await requireAdmin(request)
   if (!_auth.ok) return _auth.response
-  if (!_auth.ok) return _auth.response
   try {
     const sources = await db.dataSource.findMany({
       orderBy: { name: 'asc' },

@@ -7,6 +7,7 @@ type ActionBody = { action: 'approve' | 'publish' | 'expire' | 'retract' }
 
 // GET /api/ops/alerts/[id] — single alert with regions + deliveries.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const _auth = await requireAdmin(_req)
   if (!_auth.ok) return _auth.response
   try {
     const { id } = await ctx.params
