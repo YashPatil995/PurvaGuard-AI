@@ -17,6 +17,7 @@
 // fails, a deterministic fallback reply is returned so the UI keeps working.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { GoogleGenAI } from '@google/genai'
 
 export const runtime = 'nodejs'
 // Always run dynamically — chat is inherently request-specific.
@@ -134,36 +135,78 @@ export async function POST(req: NextRequest) {
     { role: 'user', content: message },
   ]
 
-  // Attempt to call the z-ai-web-dev-sdk. If anything goes wrong
-  // (missing config, network error, malformed response), we fall back.
+    // Call Google Gemini.
   try {
-    // Dynamic import so that a missing/invalid SDK config or runtime issue
-    // never crashes the route handler — we catch and degrade gracefully.
-    const ZAIModule = (await import('z-ai-web-dev-sdk').catch((e) => {
-      throw new Error(`SDK import failed: ${String(e?.message ?? e)}`)
-    })) as { default: { create: () => Promise<any> } }
-    const ZAI = ZAIModule.default
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not configured')
+    }
 
-    const zai = await ZAI.create()
-
-    const completion = await zai.chat.completions.create({
-      messages,
-      stream: false,
-      thinking: { type: 'disabled' },
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
     })
 
-    const reply: string | undefined =
-      completion?.choices?.[0]?.message?.content ?? undefined
+    const contents = [
+      //...history.map((item) => ({
+      //  role: item.role === 'assistant' ? 'model' : 'user',
+      //  parts: [{ text: item.content }],
+      //})),
+      {
+        role: 'user',
+        parts: [{ text: message }],
+      },
+    ]
 
-    if (!reply || typeof reply !== 'string' || reply.trim().length === 0) {
-      throw new Error('Empty response from model')
+
+let response = null
+let lastError = null
+
+const models = [
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash-lite',
+]
+
+for (const model of models) {
+  try {
+    console.log(`[api/assistant] Trying ${model}`)
+
+    response = await ai.models.generateContent({
+      model,
+      contents,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        maxOutputTokens: 800,
+      },
+    })
+
+    if (response?.text?.trim()) {
+      console.log(`[api/assistant] Success with ${model}`)
+      break
+    }
+  } catch (err: any) {
+    lastError = err
+
+    console.error(
+      `[api/assistant] ${model} failed:`,
+      err?.message ?? err
+    )
+
+    continue
+  }
+}
+
+if (!response?.text?.trim()) {
+  throw lastError ?? new Error('All Gemini models are unavailable')
+}
+
+    const reply = response.text
+
+    if (!reply || reply.trim().length === 0) {
+      throw new Error('Empty response from Gemini')
     }
 
     const trimmed = reply.trim()
 
-    // Detect whether the reply already carries a "Source:" line; if not,
-    // append a safe default so the UI's "Show source" toggle always has
-    // something to display.
     const hasSourceLine = /^Source:/im.test(trimmed)
 
     const finalReply = hasSourceLine
@@ -173,7 +216,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         reply: finalReply,
-        sources: FALLBACK_SOURCES,
+        sources: [
+          'AI-generated preparedness guidance — verify critical instructions with official authorities',
+        ],
         modelStatus: 'online' as const,
         language,
         elapsedMs: Date.now() - startedAt,
@@ -181,10 +226,11 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     )
   } catch (err: any) {
-    console.error('[api/assistant POST] model call failed:', String(err?.message ?? err))
+    console.error(
+      '[api/assistant POST] Gemini call failed:',
+      String(err?.message ?? err)
+    )
 
-    // Always return 200 with a deterministic fallback so the UI degrades
-    // gracefully rather than showing an error toast.
     return NextResponse.json(
       {
         reply: FALLBACK_REPLY,
@@ -197,7 +243,6 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-
 // Simple GET so the route is reachable for health checks if needed.
 export async function GET() {
   return NextResponse.json(
