@@ -1,65 +1,59 @@
-// PurvaGuard AI — Prisma schema
-// SQLite-adapted from the PRD's PostgreSQL/PostGIS design.
-// Spatial data is stored as Float lat/lng pairs; geofences as center+radius.
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// ── Identity & access ────────────────────────────────────────────────
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  name              String
-  role              String   @default("PUBLIC") // PUBLIC | DISTRICT_OPERATOR | STATE_OPERATOR | ADMIN | VOLUNTEER | NGO | RESPONDER | ANALYST
-  preferredLanguage String   @default("en")
-  status            String   @default("ACTIVE") // ACTIVE | SUSPENDED | INACTIVE
-  lastLoginAt       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  incidents          Incident[]
-  reports            CommunityReport[]
-  trustedContacts    TrustedContact[]
-  savedAreas         UserSavedArea[]
-  lastLocations      UserLastLocation[]
-  subscriptions      Subscription[]
-  volunteerProfile   VolunteerProfile?
-  auditLogs          AuditLog[]
-  authoredAlerts     Alert[]
-  authoredNews       NewsItem[]
-  authoredContent    ContentPage[]
-  authoredTasks      ResponseTask[]
-  taskAssignments    TaskAssignment[]
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  name                String
+  role                String               @default("PUBLIC")
+  preferredLanguage   String               @default("en")
+  status              String               @default("ACTIVE")
+  lastLoginAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  authoredAlerts      Alert[]
+  auditLogs           AuditLog[]
+  reports             CommunityReport[]
+  authoredContent     ContentPage[]
+  incidents           Incident[]
   incidentAssignments IncidentAssignment[]
+  authoredNews        NewsItem[]
+  authoredTasks       ResponseTask[]
+  subscriptions       Subscription[]
+  taskAssignments     TaskAssignment[]
+  trustedContacts     TrustedContact[]
+  lastLocations       UserLastLocation[]
+  savedAreas          UserSavedArea[]
+  volunteerProfile    VolunteerProfile?
 }
 
 model TrustedContact {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
+  id           String    @id @default(cuid())
+  userId       String
+  name         String
   relationship String
-  phone     String
-  verifiedAt DateTime?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone        String
+  verifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserSavedArea {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   userId    String
   label     String
   regionId  String?
   lat       Float
   lng       Float
-  radiusKm  Float    @default(5)
-  isDefault Boolean  @default(false)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  radiusKm  Float   @default(5)
+  isDefault Boolean @default(false)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserLastLocation {
@@ -71,121 +65,118 @@ model UserLastLocation {
   capturedAt DateTime @default(now())
   expiresAt  DateTime
   consent    String   @default("GRANTED")
-  user       User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ── Geography & mapping ──────────────────────────────────────────────
 model Region {
-  id              String   @id @default(cuid())
+  id              String               @id @default(cuid())
   parentId        String?
-  regionType     String   // STATE | DISTRICT | LOCALITY
+  regionType      String
   canonicalName   String
   stateCode       String?
-  localName       String?  // local-script display name
-  defaultLanguage String   @default("en")
+  localName       String?
+  defaultLanguage String               @default("en")
   lat             Float
   lng             Float
-  coverageStatus  String   @default("DEMO") // CONFIGURED | DATA_CONNECTED | DEMO | INACTIVE
-  active          Boolean  @default(true)
+  coverageStatus  String               @default("DEMO")
+  active          Boolean              @default(true)
   boundarySource  String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  parent          Region?  @relation("RegionHierarchy", fields: [parentId], references: [id])
-  children        Region[] @relation("RegionHierarchy")
-  facilities      Facility[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
   alerts          AlertRegion[]
+  facilities      Facility[]
+  news            NewsItem[]
+  parent          Region?              @relation("RegionHierarchy", fields: [parentId], references: [id])
+  children        Region[]             @relation("RegionHierarchy")
   riskPredictions RiskPrediction[]
   weather         WeatherObservation[]
-  news            NewsItem[]
 }
 
 model HazardZone {
-  id           String   @id @default(cuid())
-  regionId     String?
-  hazardType   String   // LANDSLIDE | FLASH_FLOOD | HEAVY_RAIN | EARTHQUAKE | ROAD_BLOCK
-  name         String
-  lat          Float
-  lng          Float
-  radiusKm     Float    @default(2)
-  baselineLevel String  @default("ADVISORY")
-  source       String?
-  validFrom    DateTime @default(now())
-  validTo      DateTime?
-  version      Int      @default(1)
-  status       String   @default("ACTIVE")
-  createdAt    DateTime @default(now())
+  id            String    @id @default(cuid())
+  regionId      String?
+  hazardType    String
+  name          String
+  lat           Float
+  lng           Float
+  radiusKm      Float     @default(2)
+  baselineLevel String    @default("ADVISORY")
+  source        String?
+  validFrom     DateTime  @default(now())
+  validTo       DateTime?
+  version       Int       @default(1)
+  status        String    @default("ACTIVE")
+  createdAt     DateTime  @default(now())
 }
 
 model Facility {
-  id            String   @id @default(cuid())
-  facilityType  String   // SHELTER | HOSPITAL | RELIEF_CENTER | POLICE_STATION | FIRE_STATION | ASSEMBLY_POINT
-  name          String
-  regionId      String?
-  lat           Float
-  lng           Float
-  address       String?
-  phone         String?
-  capacity      Int?
+  id             String    @id @default(cuid())
+  facilityType   String
+  name           String
+  regionId       String?
+  lat            Float
+  lng            Float
+  address        String?
+  phone          String?
+  capacity       Int?
   availableUnits Int?
-  accessibility String?  // Json as text
-  hours         String?
-  status        String   @default("OPEN") // OPEN | CLOSED | FULL
-  verifiedAt    DateTime?
-  source        String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  region        Region?  @relation(fields: [regionId], references: [id])
+  accessibility  String?
+  hours          String?
+  status         String    @default("OPEN")
+  verifiedAt     DateTime?
+  source         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  region         Region?   @relation(fields: [regionId], references: [id])
 }
 
 model RoadSegment {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
   lat          Float
   lng          Float
-  roadClass    String   @default("HIGHWAY")
-  status       String   @default("OPEN") // OPEN | CLOSED | RESTRICTED
-  restrictions String?  // Json as text
+  roadClass    String    @default("HIGHWAY")
+  status       String    @default("OPEN")
+  restrictions String?
   source       String?
   verifiedAt   DateTime?
   expiresAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
-// ── Weather, sensors & data provenance ────────────────────────────────
 model DataSource {
-  id                   String   @id @default(cuid())
-  name                 String
-  sourceType           String   // WEATHER | RAINFALL | RIVER | SENSOR | OFFICIAL_FEED | MAP
-  provider             String
-  refreshIntervalMinutes Int    @default(15)
-  enabled              Boolean  @default(true)
-  healthStatus         String   @default("HEALTHY") // HEALTHY | DEGRADED | ERROR | UNKNOWN
-  lastSuccessAt        DateTime?
-  lastErrorAt          DateTime?
-  lastErrorMessage     String?
-  simulationMode      Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                     String    @id @default(cuid())
+  name                   String
+  sourceType             String
+  provider               String
+  refreshIntervalMinutes Int       @default(15)
+  enabled                Boolean   @default(true)
+  healthStatus           String    @default("HEALTHY")
+  lastSuccessAt          DateTime?
+  lastErrorAt            DateTime?
+  lastErrorMessage       String?
+  simulationMode         Boolean   @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 }
 
 model WeatherObservation {
-  id           String   @id @default(cuid())
-  regionId     String?
-  stationName  String?
-  lat          Float?
-  lng          Float?
-  observedAt   DateTime @default(now())
-  rainfall24hMm Float   @default(0)
-  rainfall1hMm Float   @default(0)
-  temperatureC Float   @default(20)
-  humidityPct  Float   @default(60)
-  windKph      Float   @default(10)
-  demoLabel    Boolean  @default(true)
-  region       Region?  @relation(fields: [regionId], references: [id])
+  id            String   @id @default(cuid())
+  regionId      String?
+  stationName   String?
+  lat           Float?
+  lng           Float?
+  observedAt    DateTime @default(now())
+  rainfall24hMm Float    @default(0)
+  rainfall1hMm  Float    @default(0)
+  temperatureC  Float    @default(20)
+  humidityPct   Float    @default(60)
+  windKph       Float    @default(10)
+  demoLabel     Boolean  @default(true)
+  region        Region?  @relation(fields: [regionId], references: [id])
 }
 
-// ── AI & risk ────────────────────────────────────────────────────────
 model RiskPrediction {
   id              String   @id @default(cuid())
   regionId        String?
@@ -193,12 +184,12 @@ model RiskPrediction {
   lng             Float
   hazardType      String
   horizonMinutes  Int      @default(360)
-  riskLevel       String   // LOW | MODERATE | HIGH | VERY_HIGH
-  riskScore       Float    // 0-100
-  confidence      Float    // 0-1
-  dataCoveragePct Float    // 0-100
-  topFeatures     String?  // Json as text
-  inputSnapshot   String?  // Json as text
+  riskLevel       String
+  riskScore       Float
+  confidence      Float
+  dataCoveragePct Float
+  topFeatures     String?
+  inputSnapshot   String?
   modelVersion    String   @default("purvaguard-baseline-v1")
   generatedAt     DateTime @default(now())
   expiresAt       DateTime
@@ -206,105 +197,103 @@ model RiskPrediction {
   region          Region?  @relation(fields: [regionId], references: [id])
 }
 
-// ── Alerts & notifications ───────────────────────────────────────────
 model Alert {
-  id               String   @id @default(cuid())
-  alertType        String   // LANDSLIDE | FLASH_FLOOD | HEAVY_RAIN | EARTHQUAKE | ROAD_BLOCK | GENERAL
-  issuerType       String   @default("PLATFORM") // OFFICIAL | PLATFORM | OPERATOR | COMMUNITY
-  issuerName       String
-  title            String
-  body             String
-  severity         String   // INFORMATIONAL | ADVISORY | WATCH | WARNING | EMERGENCY
-  modelRiskLevel   String?
-  confidence       Float?
-  sourceUrl        String?
-  lat              Float?
-  lng              Float?
-  radiusKm         Float    @default(10)
-  issuedAt         DateTime @default(now())
-  validFrom        DateTime @default(now())
-  expiresAt        DateTime
-  status           String   @default("ACTIVE") // ACTIVE | EXPIRED | RETRACTED | DRAFT
-  verificationStatus String @default("PLATFORM") // OFFICIAL | DISTRICT_VERIFIED | PLATFORM | COMMUNITY | DEMO
-  languages        String   @default("en,hi,ne,as")
-  approvedBy       String?
-  publishedAt      DateTime?
-  simulationMode   Boolean  @default(true)
-  version          Int      @default(1)
-  authorId         String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  author           User?    @relation(fields: [authorId], references: [id])
-  regions          AlertRegion[]
-  deliveries       NotificationDelivery[]
+  id                 String                 @id @default(cuid())
+  alertType          String
+  issuerType         String                 @default("PLATFORM")
+  issuerName         String
+  title              String
+  body               String
+  severity           String
+  modelRiskLevel     String?
+  confidence         Float?
+  sourceUrl          String?
+  lat                Float?
+  lng                Float?
+  radiusKm           Float                  @default(10)
+  issuedAt           DateTime               @default(now())
+  validFrom          DateTime               @default(now())
+  expiresAt          DateTime
+  status             String                 @default("ACTIVE")
+  verificationStatus String                 @default("PLATFORM")
+  languages          String                 @default("en,hi,ne,as")
+  approvedBy         String?
+  publishedAt        DateTime?
+  simulationMode     Boolean                @default(true)
+  version            Int                    @default(1)
+  authorId           String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  author             User?                  @relation(fields: [authorId], references: [id])
+  regions            AlertRegion[]
+  deliveries         NotificationDelivery[]
 }
 
 model AlertRegion {
   id       String @id @default(cuid())
   alertId  String
   regionId String
-  alert    Alert  @relation(fields: [alertId], references: [id], onDelete: Cascade)
   region   Region @relation(fields: [regionId], references: [id])
+  alert    Alert  @relation(fields: [alertId], references: [id], onDelete: Cascade)
 }
 
 model Subscription {
-  id        String   @id @default(cuid())
-  userId    String?
-  regionId  String?
-  label      String?
-  hazards   String   @default("LANDSLIDE,FLASH_FLOOD,HEAVY_RAIN")
-  channels  String   @default("IN_APP")
-  soundEnabled Boolean @default(false)
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  userId       String?
+  regionId     String?
+  label        String?
+  hazards      String   @default("LANDSLIDE,FLASH_FLOOD,HEAVY_RAIN")
+  channels     String   @default("IN_APP")
+  soundEnabled Boolean  @default(false)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model NotificationDelivery {
-  id        String   @id @default(cuid())
-  alertId   String?
-  incidentId String?
-  recipient String
-  channel   String   // IN_APP | WEB_PUSH | SMS | EMAIL | WHATSAPP
-  provider  String?
-  status    String   @default("QUEUED") // QUEUED | SENT | DELIVERED | ACKNOWLEDGED | FAILED
-  queuedAt  DateTime @default(now())
-  sentAt    DateTime?
-  deliveredAt DateTime?
-  attempts  Int      @default(0)
-  simulationMode Boolean @default(true)
-  alert     Alert?   @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  id             String    @id @default(cuid())
+  alertId        String?
+  incidentId     String?
+  recipient      String
+  channel        String
+  provider       String?
+  status         String    @default("QUEUED")
+  queuedAt       DateTime  @default(now())
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  attempts       Int       @default(0)
+  simulationMode Boolean   @default(true)
+  alert          Alert?    @relation(fields: [alertId], references: [id], onDelete: Cascade)
 }
 
-// ── SOS & incidents ───────────────────────────────────────────────────
 model Incident {
-  id                String   @id @default(cuid())
-  incidentCode      String   @unique
-  incidentType      String   // SOS | LANDSLIDE | CRACK | FLOOD | ROAD_BLOCK | BRIDGE_DAMAGE | FALLEN_TREE | BUILDING_DAMAGE | MISSING_PERSON | FIRE | OTHER
-  priority          String   @default("NORMAL") // LOW | NORMAL | HIGH | CRITICAL
-  status            String   @default("NEW") // NEW | TRIAGED | VERIFIED | ASSIGNED | RESPONDING | RESOLVED | DUPLICATE | UNVERIFIED_CLOSED | CANCELLED
-  description       String
-  lat               Float
-  lng               Float
-  locationAccuracyM Float?
-  locationCapturedAt DateTime @default(now())
-  locationKind      String   @default("GPS") // GPS | MANUAL | LAST_KNOWN
-  peopleCount       Int      @default(1)
-  needs             String?  // Json as text
-  reporterUserId    String?
-  reporterContact   String?
-  consentSnapshot   String?  // Json as text
-  sourceChannel     String   @default("WEB")
-  verificationStatus String  @default("UNVERIFIED")
-  assignedTeamId    String?
-  simulationMode    Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  closedAt          DateTime?
-  reporter          User?    @relation(fields: [reporterUserId], references: [id])
-  attachments       IncidentAttachment[]
-  events            IncidentEvent[]
-  assignments       IncidentAssignment[]
+  id                 String               @id @default(cuid())
+  incidentCode       String               @unique
+  incidentType       String
+  priority           String               @default("NORMAL")
+  status             String               @default("NEW")
+  description        String
+  lat                Float
+  lng                Float
+  locationAccuracyM  Float?
+  locationCapturedAt DateTime             @default(now())
+  locationKind       String               @default("GPS")
+  peopleCount        Int                  @default(1)
+  needs              String?
+  reporterUserId     String?
+  reporterContact    String?
+  consentSnapshot    String?
+  sourceChannel      String               @default("WEB")
+  verificationStatus String               @default("UNVERIFIED")
+  assignedTeamId     String?
+  simulationMode     Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  closedAt           DateTime?
+  reporter           User?                @relation(fields: [reporterUserId], references: [id])
+  assignments        IncidentAssignment[]
+  attachments        IncidentAttachment[]
+  events             IncidentEvent[]
 }
 
 model IncidentAttachment {
@@ -326,184 +315,179 @@ model IncidentEvent {
   fromStatus String?
   toStatus   String?
   note       String?
-  payload    String?  // Json as text
+  payload    String?
   createdAt  DateTime @default(now())
   incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 }
 
 model IncidentAssignment {
-  id           String   @id @default(cuid())
-  incidentId   String
-  volunteerId  String?
-  assignedBy   String
-  assignedAt   DateTime @default(now())
-  acceptedAt   DateTime?
-  completedAt   DateTime?
-  status       String   @default("ASSIGNED")
-  note         String?
-  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
-  volunteer    User?    @relation(fields: [volunteerId], references: [id])
+  id          String    @id @default(cuid())
+  incidentId  String
+  volunteerId String?
+  assignedBy  String
+  assignedAt  DateTime  @default(now())
+  acceptedAt  DateTime?
+  completedAt DateTime?
+  status      String    @default("ASSIGNED")
+  note        String?
+  volunteer   User?     @relation(fields: [volunteerId], references: [id])
+  incident    Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 }
 
-// Community reports are a lightweight incident variant flagged isReport=true
 model CommunityReport {
-  id           String   @id @default(cuid())
-  category     String   // LANDSLIDE | CRACK | FLOOD | ROAD_BLOCK | BRIDGE_DAMAGE | FALLEN_TREE | BUILDING_DAMAGE | MISSING_PERSON | FIRE | OTHER
-  description  String
-  lat          Float
-  lng          Float
-  severity     String   @default("MODERATE") // LOW | MODERATE | HIGH | CRITICAL
-  status       String   @default("RECEIVED") // RECEIVED | UNDER_REVIEW | VERIFIED | REJECTED | RESOLVED
-  reporterUserId String?
-  observedAt   DateTime @default(now())
-  verificationStatus String @default("UNVERIFIED")
-  simulationMode Boolean @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  reporter     User?    @relation(fields: [reporterUserId], references: [id])
+  id                 String   @id @default(cuid())
+  category           String
+  description        String
+  lat                Float
+  lng                Float
+  severity           String   @default("MODERATE")
+  status             String   @default("RECEIVED")
+  reporterUserId     String?
+  observedAt         DateTime @default(now())
+  verificationStatus String   @default("UNVERIFIED")
+  simulationMode     Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  reporter           User?    @relation(fields: [reporterUserId], references: [id])
 }
 
-// ── Volunteers & NGOs ─────────────────────────────────────────────────
 model VolunteerProfile {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  organizationId   String?
-  skills           String   @default("")
-  languages        String   @default("en")
-  serviceRegions   String   @default("")
-  availabilityStatus String @default("AVAILABLE") // AVAILABLE | BUSY | OFFLINE
-  equipment        String?
-  vehicle          String?
-  training         String?
-  verificationStatus String @default("PENDING") // PENDING | VERIFIED | REJECTED | SUSPENDED
-  approvedBy       String?
-  approvedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  organizationId     String?
+  skills             String    @default("")
+  languages          String    @default("en")
+  serviceRegions     String    @default("")
+  availabilityStatus String    @default("AVAILABLE")
+  equipment          String?
+  vehicle            String?
+  training           String?
+  verificationStatus String    @default("PENDING")
+  approvedBy         String?
+  approvedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ResponseTask {
-  id               String   @id @default(cuid())
-  title            String
-  taskType         String   // SUPPORT | SUPPLY | WELFARE_CHECK | TRANSLATION | SHELTER_SUPPORT | TRANSPORT | MAPPING
-  description      String
-  lat              Float
-  lng              Float
-  regionId         String?
-  requiredSkills   String   @default("")
-  capacity         Int      @default(1)
-  status           String   @default("OPEN") // OPEN | ASSIGNED | IN_PROGRESS | COMPLETED | CANCELLED
-  coordinatorId    String?
-  startAt          DateTime?
-  endAt            DateTime?
+  id                String           @id @default(cuid())
+  title             String
+  taskType          String
+  description       String
+  lat               Float
+  lng               Float
+  regionId          String?
+  requiredSkills    String           @default("")
+  capacity          Int              @default(1)
+  status            String           @default("OPEN")
+  coordinatorId     String?
+  startAt           DateTime?
+  endAt             DateTime?
   safetyConstraints String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  coordinator      User?    @relation(fields: [coordinatorId], references: [id])
-  assignments      TaskAssignment[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  coordinator       User?            @relation(fields: [coordinatorId], references: [id])
+  assignments       TaskAssignment[]
 }
 
 model TaskAssignment {
-  id           String   @id @default(cuid())
-  taskId       String
-  volunteerId  String
-  status       String   @default("ASSIGNED") // ASSIGNED | ACCEPTED | CHECKED_IN | COMPLETED | DECLINED
-  assignedAt   DateTime @default(now())
-  acceptedAt   DateTime?
-  checkinAt    DateTime?
-  checkoutAt   DateTime?
+  id             String       @id @default(cuid())
+  taskId         String
+  volunteerId    String
+  status         String       @default("ASSIGNED")
+  assignedAt     DateTime     @default(now())
+  acceptedAt     DateTime?
+  checkinAt      DateTime?
+  checkoutAt     DateTime?
   completionNote String?
-  task         ResponseTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  volunteer    User     @relation(fields: [volunteerId], references: [id])
+  volunteer      User         @relation(fields: [volunteerId], references: [id])
+  task           ResponseTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 }
 
-// ── Content, news & media ─────────────────────────────────────────────
 model NewsItem {
-  id           String   @id @default(cuid())
-  title        String
-  summary      String
-  publisher    String
-  sourceUrl    String
-  publishedAt  DateTime @default(now())
-  fetchedAt    DateTime @default(now())
-  regionId     String?
-  categories   String   @default("GENERAL")
-  language     String   @default("en")
-  status       String   @default("PUBLISHED") // DRAFT | PUBLISHED | ARCHIVED
-  pinned       Boolean  @default(false)
-  aiSummary    String?
-  demoLabel    Boolean  @default(true)
-  authorId     String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  region       Region?  @relation(fields: [regionId], references: [id])
-  author       User?    @relation(fields: [authorId], references: [id])
+  id          String   @id @default(cuid())
+  title       String
+  summary     String
+  publisher   String
+  sourceUrl   String
+  publishedAt DateTime @default(now())
+  fetchedAt   DateTime @default(now())
+  regionId    String?
+  categories  String   @default("GENERAL")
+  language    String   @default("en")
+  status      String   @default("PUBLISHED")
+  pinned      Boolean  @default(false)
+  aiSummary   String?
+  demoLabel   Boolean  @default(true)
+  authorId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  author      User?    @relation(fields: [authorId], references: [id])
+  region      Region?  @relation(fields: [regionId], references: [id])
 }
 
 model ContentPage {
-  id           String   @id @default(cuid())
-  slug         String   @unique
+  id           String    @id @default(cuid())
+  slug         String    @unique
   title        String
   body         String
-  contentType  String   // BEFORE_DURING_AFTER | CHECKLIST | GUIDE | FAQ
-  hazardType   String?  // LANDSLIDE | FLASH_FLOOD | HEAVY_RAIN | EARTHQUAKE | GENERAL
-  language     String   @default("en")
-  version      Int      @default(1)
-  status       String   @default("PUBLISHED")
+  contentType  String
+  hazardType   String?
+  language     String    @default("en")
+  version      Int       @default(1)
+  status       String    @default("PUBLISHED")
   reviewedBy   String?
   reviewedAt   DateTime?
   nextReviewAt DateTime?
   authorId     String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  author       User?    @relation(fields: [authorId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  author       User?     @relation(fields: [authorId], references: [id])
 }
 
 model MediaAsset {
-  id           String   @id @default(cuid())
-  url          String
-  altText      String
-  caption      String?
-  credit       String?
-  sourceUrl    String?
-  moderationStatus String @default("APPROVED")
-  uploadedBy   String?
-  createdAt    DateTime @default(now())
+  id               String   @id @default(cuid())
+  url              String
+  altText          String
+  caption          String?
+  credit           String?
+  sourceUrl        String?
+  moderationStatus String   @default("APPROVED")
+  uploadedBy       String?
+  createdAt        DateTime @default(now())
 }
 
-// ── Administration & governance ───────────────────────────────────────
 model AuditLog {
-  id           String   @id @default(cuid())
-  actorId      String?
-  action       String
-  entityType   String
-  entityId     String?
-  before       String?  // Json as text
-  after        String?  // Json as text
-  ipHash       String?
-  createdAt    DateTime @default(now())
-  actor        User?    @relation(fields: [actorId], references: [id])
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  before     String?
+  after      String?
+  ipHash     String?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation(fields: [actorId], references: [id])
 }
 
 model SystemSetting {
   id        String   @id @default(cuid())
   key       String   @unique
-  value     String   // Json as text
+  value     String
   updatedAt DateTime @updatedAt
 }
 
 model Feedback {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   category   String
   message    String
   pagePath   String?
-  status     String   @default("OPEN")
-  createdAt  DateTime @default(now())
+  status     String    @default("OPEN")
+  createdAt  DateTime  @default(now())
   resolvedAt DateTime?
 }
 
-// ── SMS & disaster verification pipeline ─────────────────────────────
 model SmsRecipient {
   id        String   @id @default(cuid())
   phone     String   @unique
@@ -513,33 +497,32 @@ model SmsRecipient {
 }
 
 model SmsLog {
-  id              String   @id @default(cuid())
-  phone           String
-  message         String
-  status          String   @default("QUEUED") // QUEUED | SENT | DELIVERED | FAILED | QUOTA_EXCEEDED
-  provider        String   @default("textbelt")
+  id               String    @id @default(cuid())
+  phone            String
+  message          String
+  status           String    @default("QUEUED")
+  provider         String    @default("textbelt")
   providerResponse String?
-  alertId         String?
-  incidentId      String?
-  verificationId  String?
-  simulationMode  Boolean  @default(false)
-  sentAt          DateTime @default(now())
-  deliveredAt     DateTime?
+  alertId          String?
+  incidentId       String?
+  verificationId   String?
+  simulationMode   Boolean   @default(false)
+  sentAt           DateTime  @default(now())
+  deliveredAt      DateTime?
 }
 
 model DisasterVerification {
-  id            String   @id @default(cuid())
-  reportId      String?
-  incidentId    String?
-  inputText     String
-  analysis      String   // Json as text: { severity, confidence, isReal, affectedArea, recommendedAction, extractedLocation }
-  verified      Boolean  @default(false)
-  actionTaken   String?  // e.g. "SMS_SENT", "ALERT_CREATED", "QUEUED_FOR_REVIEW"
-  alertId       String?
-  createdAt     DateTime @default(now())
+  id          String   @id @default(cuid())
+  reportId    String?
+  incidentId  String?
+  inputText   String
+  analysis    String
+  verified    Boolean  @default(false)
+  actionTaken String?
+  alertId     String?
+  createdAt   DateTime @default(now())
 }
 
-// ── i18n translations (admin-editable) ──────────────────────────────
 model Translation {
   id        String   @id @default(cuid())
   key       String
