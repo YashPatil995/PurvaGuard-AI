@@ -20,7 +20,6 @@ export const metadata: Metadata = {
     "PurvaGuard AI is an AI-powered early warning, landslide risk monitoring, and community disaster response platform for the Himalayan & North Eastern Region.",
   keywords: ["PurvaGuard AI", "landslide early warning", "disaster management", "Himalaya", "SIH 2026", "MDoNER"],
   authors: [{ name: "PurvaGuard AI Team" }],
-  icons: { icon: "/logo.svg" },
   openGraph: {
     title: "PurvaGuard AI — Disaster Intelligence & Early Warning",
     description: "From risk signal to last-mile action. AI-powered disaster intelligence for the Himalayan belt.",
