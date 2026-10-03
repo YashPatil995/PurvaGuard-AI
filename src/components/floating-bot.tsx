@@ -49,6 +49,7 @@ export function FloatingBot() {
   const [voiceSupported, setVoiceSupported] = React.useState(false)
   const [interimText, setInterimText] = React.useState('')
   const speechListenerRef = React.useRef<{ remove: () => Promise<void> } | null>(null)
+  const speechStateListenerRef = React.useRef<any>(null)
   
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
@@ -146,18 +147,11 @@ export function FloatingBot() {
 
 const toggleVoice = React.useCallback(async () => {
   try {
-    // Stop + send the captured speech
+    // If already listening, stop recognition.
+    // The listeningState listener below will automatically send
+    // the final recognized text.
     if (listening) {
       await SpeechRecognition.stop()
-      setListening(false)
-
-      const text = interimText.trim()
-
-      if (text) {
-        await send(text, true)
-      }
-
-      setInterimText('')
       return
     }
 
@@ -175,13 +169,18 @@ const toggleVoice = React.useCallback(async () => {
       return
     }
 
-    // Remove previous partial-results listener
+    // Remove listeners from the previous voice session.
     await speechListenerRef.current?.remove()
+    speechListenerRef.current = null
 
+    // Receive live transcription.
     speechListenerRef.current = await SpeechRecognition.addListener(
       'partialResults',
       (event) => {
-        const text = event.matches?.[0]?.trim() || ''
+        const text =
+          event.accumulatedText?.trim() ||
+          event.matches?.[0]?.trim() ||
+          ''
 
         if (text) {
           setInterimText(text)
@@ -189,9 +188,41 @@ const toggleVoice = React.useCallback(async () => {
       }
     )
 
+    // Automatically send when recognition stops.
+    await SpeechRecognition.addListener(
+      'listeningState',
+      async (event) => {
+        if (event.state !== 'stopped' && event.status !== 'stopped') {
+          return
+        }
+
+        try {
+          const result = await SpeechRecognition.getLastPartialResult()
+
+          const text =
+            result.text?.trim() ||
+            result.matches?.[0]?.trim() ||
+            ''
+
+          setListening(false)
+
+          if (text) {
+            setInterimText(text)
+            await send(text, true)
+          }
+
+          setInterimText('')
+        } catch (error) {
+          console.error('Failed to get final speech result:', error)
+          setListening(false)
+          setInterimText('')
+        }
+      }
+    )
+
     setInterimText('')
     setListening(true)
-    alert('STARTING NATIVE RECOGNIZER')
+
     await SpeechRecognition.start({
       language: LANG_MAP[language] || 'en-IN',
       maxResults: 3,
@@ -204,8 +235,7 @@ const toggleVoice = React.useCallback(async () => {
     setInterimText('')
     toast.error('Voice recognition failed. Please try again.')
   }
-}, [listening, interimText, language, send])
-
+}, [listening, language, send])
   const clearChat = () => {
     setMessages([])
     localStorage.removeItem('purvaguard-chat')
