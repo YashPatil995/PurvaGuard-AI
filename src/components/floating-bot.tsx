@@ -151,9 +151,22 @@ const toggleVoice = React.useCallback(async () => {
     // The listeningState listener below will automatically send
     // the final recognized text.
     if (listening) {
-      await SpeechRecognition.stop()
-      return
-    }
+  await SpeechRecognition.forceStop()
+
+  const result = await SpeechRecognition.getLastPartialResult()
+
+  const text = result.text?.trim() || ''
+
+  setListening(false)
+
+  if (text) {
+    setInterimText(text)
+    await send(text, true)
+    setInterimText('')
+  }
+
+  return
+}
 
     const permission = await SpeechRecognition.requestPermissions()
 
