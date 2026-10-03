@@ -14,6 +14,7 @@ import { useApp } from '@/lib/store'
 import { LANGUAGES } from '@/lib/constants'
 import { apiPost } from '@/lib/api-client'
 import { toast } from 'sonner'
+import { SpeechRecognition } from '@capgo/capacitor-speech-recognition'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -22,32 +23,7 @@ interface ChatMessage {
   isVoice?: boolean
 }
 
-// Web Speech API typing
-interface SpeechRecognitionResult {
-  transcript: string
-  confidence: number
-}
-interface SpeechRecognitionEvent {
-  results: { [key: number]: { [key: number]: SpeechRecognitionResult; isFinal: boolean }[] }
-  resultIndex: number
-}
-interface SpeechRecognitionInstance {
-  lang: string
-  continuous: boolean
-  interimResults: boolean
-  start: () => void
-  stop: () => void
-  abort: () => void
-  onresult: ((e: SpeechRecognitionEvent) => void) | null
-  onerror: (() => void) | null
-  onend: (() => void) | null
-}
 
-function getSpeechRecognition(): (typeof window & { SpeechRecognition?: any; webkitSpeechRecognition?: any }) | null {
-  if (typeof window === 'undefined') return null
-  const w = window as any
-  return w.SpeechRecognition || w.webkitSpeechRecognition ? w : null
-}
 
 const LANG_MAP: Record<string, string> = {
   en: 'en-IN',
@@ -72,7 +48,8 @@ export function FloatingBot() {
   const [listening, setListening] = React.useState(false)
   const [voiceSupported, setVoiceSupported] = React.useState(false)
   const [interimText, setInterimText] = React.useState('')
-  const recognitionRef = React.useRef<SpeechRecognitionInstance | null>(null)
+  const speechListenerRef = React.useRef<{ remove: () => Promise<void> } | null>(null)
+  
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
 
@@ -96,8 +73,22 @@ export function FloatingBot() {
 
   // Check voice support
   React.useEffect(() => {
-    const w = getSpeechRecognition()
-    setVoiceSupported(!!w)
+    let mounted = true
+
+  const checkVoice = async () => {
+    try {
+      const { available } = await SpeechRecognition.available()
+      if (mounted) setVoiceSupported(available)
+    } catch {
+      if (mounted) setVoiceSupported(false)
+    }
+  }
+
+  checkVoice()
+
+  return () => {
+    mounted = false
+  }
   }, [])
 
   // Auto-scroll
@@ -153,61 +144,67 @@ export function FloatingBot() {
     }
   }, [messages, sending, language])
 
-  const toggleVoice = React.useCallback(() => {
-    if (!voiceSupported) {
-      toast.error('Voice input not supported in this browser. Try Chrome.')
-      return
-    }
-
+const toggleVoice = React.useCallback(async () => {
+  try {
+    // Stop + send the captured speech
     if (listening) {
-      recognitionRef.current?.stop()
+      await SpeechRecognition.stop()
       setListening(false)
+
+      const text = interimText.trim()
+
+      if (text) {
+        await send(text, true)
+      }
+
+      setInterimText('')
       return
     }
 
-    const w = getSpeechRecognition()
-    if (!w) return
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
-    const recognition = new SR() as SpeechRecognitionInstance
-    recognition.lang = LANG_MAP[language] || 'en-IN'
-    recognition.continuous = false
-    recognition.interimResults = true
+    const permission = await SpeechRecognition.requestPermissions()
 
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
-      let finalText = ''
-      let interim = ''
-      for (let i = e.resultIndex; i < (e.results as any).length; i++) {
-        const result = (e.results as any)[i]
-        if (result.isFinal) {
-          finalText += result[0].transcript
-        } else {
-          interim += result[0].transcript
+    if (permission.speechRecognition !== 'granted') {
+      toast.error('Microphone permission is required for voice input.')
+      return
+    }
+
+    const { available } = await SpeechRecognition.available()
+
+    if (!available) {
+      toast.error('Speech recognition is not available on this device.')
+      return
+    }
+
+    // Remove previous partial-results listener
+    await speechListenerRef.current?.remove()
+
+    speechListenerRef.current = await SpeechRecognition.addListener(
+      'partialResults',
+      (event) => {
+        const text = event.matches?.[0]?.trim() || ''
+
+        if (text) {
+          setInterimText(text)
         }
       }
-      if (finalText) {
-        setInterimText('')
-        send(finalText, true)
-      } else {
-        setInterimText(interim)
-      }
-    }
+    )
 
-    recognition.onerror = () => {
-      setListening(false)
-      setInterimText('')
-      toast.error('Voice recognition error. Try again.')
-    }
-
-    recognition.onend = () => {
-      setListening(false)
-      setInterimText('')
-    }
-
-    recognitionRef.current = recognition
-    recognition.start()
+    setInterimText('')
     setListening(true)
-    toast.success(`Listening in ${LANGUAGES.find((l) => l.code === language)?.label || 'English'}…`)
-  }, [voiceSupported, listening, language, send])
+    alert('STARTING NATIVE RECOGNIZER')
+    await SpeechRecognition.start({
+      language: LANG_MAP[language] || 'en-IN',
+      maxResults: 3,
+      partialResults: true,
+      popup: false,
+    })
+  } catch (error) {
+    console.error('Native speech recognition error:', error)
+    setListening(false)
+    setInterimText('')
+    toast.error('Voice recognition failed. Please try again.')
+  }
+}, [listening, interimText, language, send])
 
   const clearChat = () => {
     setMessages([])
