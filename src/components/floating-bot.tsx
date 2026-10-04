@@ -222,6 +222,7 @@ const toggleVoice = React.useCallback(async () => {
       maxResults: 3,
       partialResults: true,
       popup: false,
+      allowForSilence: 1500,
     })
   } catch (error) {
     console.error('Native speech recognition error:', error)
