@@ -178,7 +178,7 @@ const toggleVoice = React.useCallback(async () => {
     // Receive live transcription.
     speechListenerRef.current = await SpeechRecognition.addListener(
       'partialResults',
-      (event) => {
+       async (event) => {
         const text =
           event.accumulatedText?.trim() ||
           event.matches?.[0]?.trim() ||
