@@ -196,6 +196,22 @@ const toggleVoice = React.useCallback(async () => {
     )
 
     // Automatically send when recognition stops.
+    const listeningStateListener = await SpeechRecognition.addListener(
+  'listeningState',
+  async (event) => {
+    if (event.state === 'stopped' && event.reason === 'silence') {
+      const result = await SpeechRecognition.getLastPartialResult()
+      const text = result.text?.trim() || ''
+
+      if (text) {
+        setListening(false)
+        setInterimText(text)
+        await send(text, true)
+        setInterimText('')
+      }
+    }
+  }
+)
     
 
     setInterimText('')
