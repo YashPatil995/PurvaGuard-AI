@@ -153,17 +153,6 @@ const toggleVoice = React.useCallback(async () => {
     if (listening) {
   await SpeechRecognition.forceStop()
 
-  const result = await SpeechRecognition.getLastPartialResult()
-
-  const text = result.text?.trim() || ''
-
-  setListening(false)
-
-  if (text) {
-    setInterimText(text)
-    await send(text, true)
-    setInterimText('')
-  }
 
   return
 }
@@ -197,41 +186,17 @@ const toggleVoice = React.useCallback(async () => {
 
         if (text) {
           setInterimText(text)
+          if (event.forced) {
+    setListening(false)
+    await send(text, true)
+    setInterimText('')
+  }
         }
       }
     )
 
     // Automatically send when recognition stops.
-    await SpeechRecognition.addListener(
-      'listeningState',
-      async (event) => {
-        if (event.state !== 'stopped' && event.status !== 'stopped') {
-          return
-        }
-
-        try {
-          const result = await SpeechRecognition.getLastPartialResult()
-
-          const text =
-            result.text?.trim() ||
-            result.matches?.[0]?.trim() ||
-            ''
-
-          setListening(false)
-
-          if (text) {
-            setInterimText(text)
-            await send(text, true)
-          }
-
-          setInterimText('')
-        } catch (error) {
-          console.error('Failed to get final speech result:', error)
-          setListening(false)
-          setInterimText('')
-        }
-      }
-    )
+    
 
     setInterimText('')
     setListening(true)

@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'PurvaGuard AI',
   webDir: 'public',
   server: {
-    url: 'https://purva-guard-mi3xm19jb-yashpatil996.vercel.app',
+    url: 'https://purva-guard-ai-git-apk-voice-test-yashpatil996.vercel.app',
   },
 };
 
