@@ -7,7 +7,7 @@ import {
   AlertTriangle, RefreshCw, Plus, Pencil, Archive, Pin, PinOff, Save,
   Inbox, Search, X, CheckCircle2, Power, MessageSquare, Cpu, ChevronRight,
   Info, Database, PlayCircle, ExternalLink, Trash2, Eye, AlertOctagon,
-  BadgeCheck, ShieldAlert, Zap, Sparkles,
+  BadgeCheck, ShieldAlert, Zap, Sparkles, Download,
 } from 'lucide-react'
 import { useApp } from '@/lib/store'
 import { apiGet, apiPost, apiPatch } from '@/lib/api-client'
@@ -1695,6 +1695,7 @@ function NewsSection() {
   const [loading, setLoading] = React.useState(true)
   const [editing, setEditing] = React.useState<any | null>(null)
   const [creating, setCreating] = React.useState(false)
+  const [ingesting, setIngesting] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -1709,6 +1710,23 @@ function NewsSection() {
   }, [])
 
   React.useEffect(() => { load() }, [load])
+
+  async function ingestLiveNews() {
+    setIngesting(true)
+    toast.info('Fetching live news from Google News RSS…')
+    try {
+      const r = await apiPost<{ success: boolean; ingested: number; fetched: number; source: string; newItems: any[] }>('/api/news/ingest', {})
+      toast.success(`Ingested ${r.ingested} live news articles!`, {
+        description: `Source: ${r.source}. Fetched ${r.fetched} from RSS, stored ${r.ingested} new.`,
+        duration: 6000,
+      })
+      load()
+    } catch (e) {
+      toast.error('News ingestion failed', { description: String(e) })
+    } finally {
+      setIngesting(false)
+    }
+  }
 
   async function archive(id: string) {
     try {
@@ -1751,6 +1769,10 @@ function NewsSection() {
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={load} disabled={loading}>
                 <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+              </Button>
+              <Button size="sm" variant="secondary" onClick={ingestLiveNews} disabled={ingesting} className="gap-1.5">
+                {ingesting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                {ingesting ? 'Fetching…' : 'Fetch Live News'}
               </Button>
               <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-3.5 w-3.5" /> New</Button>
             </div>
