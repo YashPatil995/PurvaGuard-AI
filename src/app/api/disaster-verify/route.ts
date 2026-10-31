@@ -129,8 +129,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    let alertCreated = null
-    let smsResult = null
+    let alertCreated: any = null
+    let smsResult: any = null
 
     // 3. If verified as high-severity disaster → auto-create alert + send SMS
     if (analysis.isRealDisaster && (analysis.severity === 'HIGH' || analysis.severity === 'CRITICAL')) {

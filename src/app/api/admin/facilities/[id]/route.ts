@@ -20,8 +20,8 @@ type PatchBody = {
 }
 
 // PATCH /api/admin/facilities/[id] — update a facility.
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {
@@ -71,8 +71,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 }
 
 // DELETE /api/admin/facilities/[id] — soft delete: set status CLOSED.
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const _auth = await requireAdmin(_req as any)
   if (!_auth.ok) return _auth.response
 
   try {

@@ -1713,12 +1713,13 @@ function NewsSection() {
 
   async function ingestLiveNews() {
     setIngesting(true)
-    toast.info('Fetching live news from Google News RSS…')
+    toast.info('Fetching live news from official government disaster sources (NDMA, IMD, SACHET, ASDMA, NDRF, CWC, ReliefWeb)…')
     try {
-      const r = await apiPost<{ success: boolean; ingested: number; fetched: number; source: string; newItems: any[] }>('/api/news/ingest', {})
+      const r = await apiPost<{ success: boolean; ingested: number; fetched: number; sources?: { name: string; website: string }[]; newItems: any[] }>('/api/news/ingest', {})
+      const sourceList = (r.sources ?? []).map((s: any) => s.website).join(', ')
       toast.success(`Ingested ${r.ingested} live news articles!`, {
-        description: `Source: ${r.source}. Fetched ${r.fetched} from RSS, stored ${r.ingested} new.`,
-        duration: 6000,
+        description: sourceList ? `Sources: ${sourceList}.` : `Fetched ${r.fetched} items, stored ${r.ingested} new.`,
+        duration: 8000,
       })
       load()
     } catch (e) {
@@ -1785,6 +1786,7 @@ function NewsSection() {
                 <TableRow>
                   <TableHead className="text-xs">Title</TableHead>
                   <TableHead className="text-xs">Publisher</TableHead>
+                  <TableHead className="text-xs">Source Website</TableHead>
                   <TableHead className="text-xs">Categories</TableHead>
                   <TableHead className="text-xs">Status</TableHead>
                   <TableHead className="text-xs">Published</TableHead>
@@ -1794,7 +1796,7 @@ function NewsSection() {
               <TableBody>
                 {items.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground text-xs py-8">
                       {loading ? 'Loading…' : 'No news articles yet.'}
                     </TableCell>
                   </TableRow>
@@ -1809,6 +1811,22 @@ function NewsSection() {
                       <div className="text-[10px] text-muted-foreground truncate">{n.summary}</div>
                     </TableCell>
                     <TableCell className="text-xs">{n.publisher}</TableCell>
+                    <TableCell className="text-xs">
+                      {n.sourceUrl && n.sourceUrl !== '#' ? (
+                        <a
+                          href={n.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline inline-flex items-center gap-0.5"
+                          title={n.sourceUrl}
+                        >
+                          {n.sourceWebsite || (() => { try { return new URL(n.sourceUrl).hostname.replace(/^www\./, '') } catch { return n.sourceUrl.slice(0, 30) } })()}
+                          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-[11px] text-muted-foreground">{n.categories}</TableCell>
                     <TableCell><StatusBadge status={n.status} /></TableCell>
                     <TableCell className="text-[11px] text-muted-foreground whitespace-nowrap">{formatRelativeTime(n.publishedAt)}</TableCell>

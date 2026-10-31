@@ -39,8 +39,8 @@ export async function GET(request: Request) {
 }
 
 // POST /api/admin/regions — create a region.
-export async function POST(req: Request, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function POST(req: Request) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {

@@ -63,8 +63,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 // Body: { status?, priority?, assignedTeamId?, note? }
 // Validates status transitions, appends IncidentEvent (STATUS_CHANGE or NOTE),
 // and creates an IncidentAssignment when assigning.
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {

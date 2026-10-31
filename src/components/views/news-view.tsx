@@ -30,6 +30,7 @@ interface NewsItem {
   summary: string
   publisher: string
   sourceUrl: string
+  sourceWebsite?: string
   publishedAt: string
   fetchedAt: string
   regionId?: string | null
@@ -275,6 +276,17 @@ function NewsCard({ item, pinned }: { item: NewsItem; pinned?: boolean }) {
   const categories = (item.categories || 'GENERAL').split(',').map((c) => c.trim()).filter(Boolean)
   const isStale = Date.now() - new Date(item.fetchedAt).getTime() > 6 * 3600000
 
+  const sourceDomain: string = (() => {
+    if (item.sourceWebsite && item.sourceWebsite.trim()) return item.sourceWebsite.trim()
+    try {
+      return new URL(item.sourceUrl).hostname.replace(/^www\./, '')
+    } catch {
+      return item.publisher
+    }
+  })()
+
+  const hasRealLink = item.sourceUrl && item.sourceUrl !== '#' && item.sourceUrl.startsWith('http')
+
   return (
     <Card className={cn('hover:shadow-md transition-shadow', pinned && 'border-amber-300 bg-amber-50/40 dark:bg-amber-950/20 dark:border-amber-900')}>
       <CardHeader>
@@ -321,10 +333,23 @@ function NewsCard({ item, pinned }: { item: NewsItem; pinned?: boolean }) {
       </CardHeader>
       <CardContent className="pt-0">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex items-center gap-1 font-semibold text-foreground">
             <Radio className="h-3 w-3" />
-            <span className="font-medium text-foreground">{item.publisher}</span>
+            {hasRealLink ? (
+              <a
+                href={item.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline text-primary"
+                title={`Open original article on ${sourceDomain}`}
+              >
+                {sourceDomain}
+              </a>
+            ) : (
+              <span>{sourceDomain}</span>
+            )}
           </span>
+          <span className="text-muted-foreground">·</span>
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3 w-3" />
             Published {formatRelativeTime(item.publishedAt)}
@@ -338,6 +363,25 @@ function NewsCard({ item, pinned }: { item: NewsItem; pinned?: boolean }) {
             <Badge variant="outline" className="text-[10px]">Region: {item.regionId.slice(-6)}</Badge>
           )}
         </div>
+        {item.publisher && item.publisher !== sourceDomain && (
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Publisher: <span className="font-medium">{item.publisher}</span>
+          </p>
+        )}
+        {hasRealLink && (
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+            Source link:{' '}
+            <a
+              href={item.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline break-all"
+              title="Direct link to the original article"
+            >
+              {item.sourceUrl}
+            </a>
+          </p>
+        )}
       </CardContent>
     </Card>
   )

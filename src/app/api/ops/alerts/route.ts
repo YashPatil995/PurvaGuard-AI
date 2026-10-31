@@ -45,8 +45,8 @@ export async function GET(req: Request) {
 // POST /api/ops/alerts — draft a new alert.
 // Created with status DRAFT and verificationStatus PLATFORM.
 // authorId is the seeded district operator.
-export async function POST(req: Request, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function POST(req: Request) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {

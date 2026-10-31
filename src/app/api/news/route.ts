@@ -10,6 +10,7 @@ interface NewsListItem {
   summary: string
   publisher: string
   sourceUrl: string
+  sourceWebsite: string
   publishedAt: string
   fetchedAt: string
   categories: string
@@ -53,6 +54,7 @@ export async function GET(req: Request) {
       summary: n.summary,
       publisher: n.publisher,
       sourceUrl: n.sourceUrl,
+      sourceWebsite: (n as any).sourceWebsite ?? '',
       publishedAt: n.publishedAt.toISOString(),
       fetchedAt: n.fetchedAt.toISOString(),
       categories: n.categories,

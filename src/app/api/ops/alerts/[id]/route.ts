@@ -35,8 +35,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 // PATCH /api/ops/alerts/[id] with body { action }.
 // approve/publish/expire/retract — transitions status, verificationStatus,
 // publishedAt and creates a NotificationDelivery on publish (simulated).
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {

@@ -8,6 +8,7 @@ type PatchBody = {
   summary?: string
   publisher?: string
   sourceUrl?: string
+  sourceWebsite?: string
   categories?: string
   pinned?: boolean
   status?: string
@@ -16,8 +17,8 @@ type PatchBody = {
 }
 
 // PATCH /api/admin/news/[id] — edit a NewsItem.
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {
@@ -29,13 +30,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     const admin = await getDemoActor('admin.demo@purvaguard.in')
 
-    const updated = await db.newsItem.update({
+    const updated = await (db.newsItem as any).update({
       where: { id },
       data: {
         title: body.title ?? undefined,
         summary: body.summary ?? undefined,
         publisher: body.publisher ?? undefined,
         sourceUrl: body.sourceUrl ?? undefined,
+        sourceWebsite: body.sourceWebsite ?? undefined,
         categories: body.categories ?? undefined,
         pinned: body.pinned ?? undefined,
         status: body.status ?? undefined,
@@ -63,8 +65,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 }
 
 // DELETE /api/admin/news/[id] — soft delete: set status ARCHIVED.
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const _auth = await requireAdmin(_req as any)
   if (!_auth.ok) return _auth.response
 
   try {

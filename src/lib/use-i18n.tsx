@@ -1,7 +1,6 @@
 'use client'
 
 import * as React from 'react'
-import { DEFAULT_TRANSLATIONS } from '@/lib/constants'
 import { useApp } from '@/lib/store'
 import { apiGet } from '@/lib/api-client'
 

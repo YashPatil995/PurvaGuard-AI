@@ -8,6 +8,7 @@ type CreateBody = {
   summary: string
   publisher: string
   sourceUrl: string
+  sourceWebsite?: string
   categories?: string
   pinned?: boolean
   status?: string // DRAFT | PUBLISHED | ARCHIVED
@@ -38,8 +39,8 @@ export async function GET(request: Request) {
 }
 
 // POST /api/admin/news — create NewsItem. authorId is the seeded admin.
-export async function POST(req: Request, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function POST(req: Request) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {
@@ -54,12 +55,13 @@ export async function POST(req: Request, request: Request) {
     if (!admin) {
       return NextResponse.json({ error: 'Admin account not seeded' }, { status: 500 })
     }
-    const created = await db.newsItem.create({
+    const created = await (db.newsItem as any).create({
       data: {
         title: body.title,
         summary: body.summary,
         publisher: body.publisher,
         sourceUrl: body.sourceUrl,
+        sourceWebsite: body.sourceWebsite ?? (() => { try { return new URL(body.sourceUrl).hostname.replace(/^www\./, '') } catch { return '' } })(),
         categories: body.categories ?? 'GENERAL',
         pinned: body.pinned ?? false,
         status: body.status ?? 'PUBLISHED',

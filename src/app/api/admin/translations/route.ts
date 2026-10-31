@@ -47,8 +47,8 @@ type PostBody = {
 
 // POST /api/admin/translations — upsert a Translation row keyed by (key, language).
 // Body: { key, language, value }.
-export async function POST(req: NextRequest, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function POST(req: NextRequest) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {

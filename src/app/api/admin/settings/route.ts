@@ -25,8 +25,8 @@ export async function GET(request: Request) {
 
 // PATCH /api/admin/settings — upsert a system setting (by key).
 // Body: { key, value }. Both are strings — value is opaque JSON stored as text.
-export async function PATCH(req: Request, request: Request) {
-  const _auth = await requireAdmin(request as any)
+export async function PATCH(req: Request) {
+  const _auth = await requireAdmin(req as any)
   if (!_auth.ok) return _auth.response
 
   try {
