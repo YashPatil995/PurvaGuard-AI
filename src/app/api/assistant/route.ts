@@ -157,8 +157,8 @@ export async function POST(req: NextRequest) {
     ]
 
 
-let response = null
-let lastError = null
+let response: any = null
+let lastError: any = null
 
 const models = [
   'gemini-3.1-flash-lite',
