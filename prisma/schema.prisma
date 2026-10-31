@@ -9,11 +9,15 @@ datasource db {
 
 model User {
   id                  String               @id @default(cuid())
-  email               String               @unique
+  email               String?              @unique
+  phone               String?              @unique
+  firstName           String?
+  lastName            String?
   name                String
   role                String               @default("PUBLIC")
   preferredLanguage   String               @default("en")
   status              String               @default("ACTIVE")
+  authProvider        String?              @default("PHONE_EMAIL")
   lastLoginAt         DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt

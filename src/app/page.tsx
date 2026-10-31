@@ -588,19 +588,35 @@ function ViewLoader() {
   )
 }
 
-function ViewRouter({ adminAuthed }: { adminAuthed: boolean }) {
-  const { view } = useApp()
+function ViewRouter({
+  adminAuthed,
+  onOpenAdminLogin,
+}: {
+  adminAuthed: boolean
+  onOpenAdminLogin: () => void
+}) {
+  const { view, setView } = useApp()
 
   // Block admin view if not authed
   if (view === 'admin' && !adminAuthed) {
     return (
       <div className="flex items-center justify-center py-32 px-4">
-        <div className="text-center space-y-3 max-w-md">
-          <Lock className="h-12 w-12 mx-auto text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Admin access required</h2>
-          <p className="text-sm text-muted-foreground">
-            Click the PurvaGuard AI logo 8 times to reveal the admin login prompt. All admin APIs are server-side protected.
-          </p>
+        <div className="text-center space-y-4 max-w-md bg-card p-6 rounded-xl border shadow-sm">
+          <Lock className="h-10 w-10 mx-auto text-muted-foreground" />
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold">Admin Access Required</h2>
+            <p className="text-xs text-muted-foreground">
+              The Admin Dashboard is protected. Please unlock with your password or return to the main dashboard.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button variant="default" size="sm" onClick={() => setView('home')}>
+              Back to Home
+            </Button>
+            <Button variant="outline" size="sm" onClick={onOpenAdminLogin}>
+              Enter Admin Password
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -629,9 +645,16 @@ function ViewRouter({ adminAuthed }: { adminAuthed: boolean }) {
 }
 
 export default function Page() {
-  const { setView } = useApp()
+  const { view, setView } = useApp()
   const [adminDialogOpen, setAdminDialogOpen] = React.useState(false)
   const { authed: adminAuthed, refresh: refreshAdmin } = useAdminAuth()
+
+  // Ensure fresh visitors or unauthenticated sessions always default to 'home'
+  React.useEffect(() => {
+    if (view === 'admin' && !adminAuthed) {
+      setView('home')
+    }
+  }, [view, adminAuthed, setView])
 
   return (
     <I18nProvider>
@@ -639,7 +662,10 @@ export default function Page() {
         <SonnerToaster position="top-right" richColors closeButton />
         <Header onAdminAccess={() => setAdminDialogOpen(true)} />
         <main className="flex-1 w-full">
-          <ViewRouter adminAuthed={adminAuthed} />
+          <ViewRouter
+            adminAuthed={adminAuthed}
+            onOpenAdminLogin={() => setAdminDialogOpen(true)}
+          />
         </main>
         <Footer />
         <MobileBottomNav />

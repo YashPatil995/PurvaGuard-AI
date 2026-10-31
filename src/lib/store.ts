@@ -91,7 +91,6 @@ export const useApp = create<AppState>()(
       name: 'purvaguard-app-state',
       partialize: (s) => ({
         role: s.role,
-        view: s.view,
         language: s.language,
         location: s.location,
         lowBandwidth: s.lowBandwidth,
